@@ -1,0 +1,10 @@
+<!doctype html>
+<html><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&display=swap" rel="stylesheet" />
+<style>html,body{margin:0;height:100%;overflow:hidden;background:#0b2a55}canvas{display:block;touch-action:none}</style>
+<script>
+// Test-only: keep the game loop running in a hidden pane (rAF is paused there).
+window.requestAnimationFrame = (cb) => setTimeout(() => cb(performance.now()), 16)
+window.cancelAnimationFrame = (id) => clearTimeout(id)
+</script>
+</head><body><script type="module" src="./src/main.js"></script></body></html>

@@ -1,0 +1,315 @@
+/* Panel skin for the shared window shell (createWindow({ skin: 'panel' }), uiWindow.js): the
+   Shop / Sell / Pets look. A coloured header bar with a big tilted icon hanging off its left end,
+   the outlined title, an optional slot (.uiw-extra) and a square red X inside its right end;
+   under it a dark see-through body with a thick dark border. Measured off the 1913x990
+   reference shots; lengths are design px times --uiw-u like the rest of the shell.
+   Per window (on the overlay): --uiw-w (= header width), --uiw-h (whole frame height),
+   --ph (header height), --bw (body width), --bh (body height), --head (header background),
+   --body (body background). */
+.uiw-panel {
+  --ph: 105;
+  --bw: 860;
+  --bh: 560;
+  --head: linear-gradient(#e9ff3a, #b8f514 55%, #9ee60c);
+  --body: rgba(22, 24, 20, 0.42);
+}
+.uiw-panel .uiw-dialog {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 0;
+  background: none;
+  border: 0;
+  border-radius: 0;
+}
+
+/* Header bar. */
+.uiw-panel .uiw-title {
+  position: relative;
+  left: auto;
+  top: auto;
+  width: 100%;
+  height: calc(var(--ph) * var(--uiw-u));
+  min-height: 44px;
+  padding: 0 calc(120 * var(--uiw-u)) 0 calc(135 * var(--uiw-u));
+  gap: calc(16 * var(--uiw-u));
+  background: var(--head);
+  border: max(2px, calc(6 * var(--uiw-u))) solid var(--uiw-ink);
+  box-shadow:
+    inset 0 calc(-10 * var(--uiw-u)) 0 rgba(0, 0, 0, 0.14),
+    inset 0 calc(7 * var(--uiw-u)) 0 rgba(255, 255, 255, 0.35);
+  z-index: 1;
+}
+.uiw-panel .uiw-title-icon {
+  position: absolute;
+  left: calc(-22 * var(--uiw-u));
+  top: 50%;
+  width: calc(150 * var(--uiw-u));
+  height: calc(150 * var(--uiw-u));
+  min-width: 48px;
+  min-height: 48px;
+  transform: translateY(-50%) rotate(-10deg);
+  filter: drop-shadow(0 calc(4 * var(--uiw-u)) 0 rgba(0, 0, 0, 0.25));
+}
+.uiw-panel .uiw-title h2 {
+  font-size: max(20px, calc(64 * var(--uiw-u)));
+  white-space: nowrap;
+  --ow: 5.5;
+}
+.uiw-extra:empty {
+  display: none;
+}
+.uiw-panel .uiw-extra {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+}
+
+/* Square red X inside the header's right end. */
+.uiw-panel .uiw-close {
+  right: calc(14 * var(--uiw-u));
+  top: max(0px, calc((var(--ph) * var(--uiw-u) - max(44px, 86 * var(--uiw-u))) / 2));
+  width: max(44px, calc(86 * var(--uiw-u)));
+  height: max(44px, calc(86 * var(--uiw-u)));
+  border-radius: calc(6 * var(--uiw-u));
+  border-width: max(2px, calc(5 * var(--uiw-u)));
+  background: linear-gradient(#ff4d6a, #f0243f 55%, #d8102c);
+  transform: none;
+  z-index: 2;
+}
+.uiw-panel .uiw-close:active {
+  transform: scale(0.92);
+}
+
+/* Dark body under the header. */
+.uiw-panel .uiw-body {
+  width: calc(var(--bw) * var(--uiw-u));
+  height: calc(var(--bh) * var(--uiw-u));
+  padding: 0 !important;
+  display: flex;
+  flex-direction: column;
+  background: var(--body);
+  border: max(2px, calc(6 * var(--uiw-u))) solid var(--uiw-ink);
+  border-top: 0;
+  color: #fff;
+}
+/* Phones in portrait: the frame is as wide as the screen allows, so let the body grow taller. */
+@media (orientation: portrait) {
+  .uiw-panel .uiw-body {
+    height: max(calc(var(--bh) * var(--uiw-u)), min(64dvh, calc(var(--bh) * 1px)));
+  }
+}
+.pw-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+  padding: calc(22 * var(--uiw-u)) calc(22 * var(--uiw-u)) calc(26 * var(--uiw-u));
+  display: flex;
+  flex-direction: column;
+  gap: calc(16 * var(--uiw-u));
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.45) transparent;
+}
+.pw-empty {
+  margin: auto;
+  padding: 0 calc(40 * var(--uiw-u));
+  text-align: center;
+  font-size: max(15px, calc(36 * var(--uiw-u)));
+  color: #fff;
+  --ow: 4;
+}
+
+/* Chunky buttons (Sell, Unequip, prices). */
+.pw-btn {
+  --lip: rgba(0, 0, 0, 0.22);
+  flex: none;
+  min-height: 44px;
+  padding: 0 calc(22 * var(--uiw-u)) calc(6 * var(--uiw-u));
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: calc(10 * var(--uiw-u));
+  border: max(2px, calc(5 * var(--uiw-u))) solid var(--uiw-ink);
+  border-radius: calc(6 * var(--uiw-u));
+  font: inherit;
+  font-size: max(15px, calc(46 * var(--uiw-u)));
+  line-height: 1;
+  color: #fff;
+  --ow: 4.5;
+  box-shadow:
+    inset 0 calc(-8 * var(--uiw-u)) 0 var(--lip),
+    inset 0 calc(6 * var(--uiw-u)) 0 rgba(255, 255, 255, 0.35);
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.06s, filter 0.1s;
+}
+.pw-btn:active {
+  transform: translateY(calc(3 * var(--uiw-u))) scale(0.97);
+}
+.pw-btn.green {
+  background: linear-gradient(#b8ff2a, #5ae812 50%, #2fd10c);
+}
+.pw-btn.red {
+  background: linear-gradient(#ff5a4a, #f2201c 55%, #d10f0f);
+}
+.pw-btn.orange {
+  background: linear-gradient(#ffd24a, #ff8a1a 55%, #f2560c);
+}
+.pw-btn.purple {
+  background: linear-gradient(#e08cff, #b030ff 55%, #8a12e0);
+}
+.pw-btn.done,
+.pw-btn:disabled {
+  background: linear-gradient(#9aa1ad, #6f7682);
+  cursor: default;
+}
+.pw-btn.poor {
+  filter: saturate(0.55) brightness(0.92);
+}
+.pw-btn svg {
+  width: 1em;
+  height: 1em;
+}
+
+/* List rows (Sell, Pets). */
+.pw-row {
+  display: flex;
+  align-items: center;
+  gap: calc(20 * var(--uiw-u));
+  min-height: calc(130 * var(--uiw-u));
+  padding: calc(10 * var(--uiw-u)) calc(14 * var(--uiw-u)) calc(10 * var(--uiw-u)) calc(18 * var(--uiw-u));
+  background: rgba(10, 12, 10, 0.32);
+  border: max(2px, calc(5 * var(--uiw-u))) solid rgba(24, 24, 22, 0.85);
+}
+.pw-thumb {
+  flex: none;
+  width: calc(110 * var(--uiw-u));
+  height: calc(110 * var(--uiw-u));
+  min-width: 40px;
+  min-height: 40px;
+  object-fit: contain;
+  filter: drop-shadow(0 calc(3 * var(--uiw-u)) 0 rgba(0, 0, 0, 0.35));
+}
+.pw-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: calc(4 * var(--uiw-u));
+}
+.pw-name {
+  font-size: max(16px, calc(50 * var(--uiw-u)));
+  line-height: 1.05;
+  color: #fff;
+  --ow: 5;
+  overflow-wrap: anywhere;
+}
+.pw-name em {
+  font-style: normal;
+  color: var(--tag, #ffd21f);
+}
+.pw-sub {
+  font-size: max(12px, calc(36 * var(--uiw-u)));
+  line-height: 1.1;
+  color: #fff;
+  --ow: 4;
+}
+.pw-sub .up {
+  color: #8dff4a;
+}
+.pw-val {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: calc(4 * var(--uiw-u));
+  text-align: right;
+}
+.pw-val b {
+  font-size: max(16px, calc(50 * var(--uiw-u)));
+  line-height: 1;
+  color: #8dff2a;
+  --ow: 5;
+}
+.pw-val span {
+  font-size: max(12px, calc(36 * var(--uiw-u)));
+  color: #fff;
+  --ow: 4;
+}
+.pw-row .pw-btn {
+  width: calc(210 * var(--uiw-u));
+  min-width: 72px;
+  height: calc(96 * var(--uiw-u));
+  font-size: max(16px, calc(60 * var(--uiw-u)));
+}
+
+/* Footer strip (Sell: under the body; Pets: inside its bottom). */
+.pw-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: calc(20 * var(--uiw-u));
+  padding: calc(10 * var(--uiw-u)) calc(10 * var(--uiw-u)) calc(10 * var(--uiw-u)) calc(22 * var(--uiw-u));
+  background: rgba(70, 72, 30, 0.5);
+  border: max(2px, calc(6 * var(--uiw-u))) solid var(--uiw-ink);
+}
+.pw-foot .pw-total {
+  font-size: max(15px, calc(44 * var(--uiw-u)));
+  color: #e3ff3a;
+  --ow: 4.5;
+}
+.pw-foot .pw-btn {
+  min-width: calc(245 * var(--uiw-u));
+  height: calc(62 * var(--uiw-u));
+  font-size: max(15px, calc(42 * var(--uiw-u)));
+}
+.pw-btn.confirm {
+  background: linear-gradient(#ff5a4a, #f2201c 55%, #d10f0f);
+}
+
+/* Side tabs to the left of the body (Sell: Animals / Baits). */
+.pw-tabs {
+  position: absolute;
+  left: calc(-10 * var(--uiw-u));
+  top: calc((var(--ph) + 58) * var(--uiw-u));
+  transform: translateX(-100%);
+  display: flex;
+  flex-direction: column;
+  gap: calc(14 * var(--uiw-u));
+}
+.pw-tab {
+  width: max(44px, calc(90 * var(--uiw-u)));
+  height: max(44px, calc(90 * var(--uiw-u)));
+  padding: calc(10 * var(--uiw-u));
+  border: max(2px, calc(5 * var(--uiw-u))) solid var(--uiw-ink);
+  border-radius: calc(4 * var(--uiw-u));
+  background: linear-gradient(#2c6a2c, #1d4f1f);
+  box-shadow: inset 0 calc(-6 * var(--uiw-u)) 0 rgba(0, 0, 0, 0.25);
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+.pw-tab svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.pw-tab.on {
+  background: linear-gradient(#2a8cff, #126fe8);
+  box-shadow:
+    inset 0 calc(-6 * var(--uiw-u)) 0 rgba(0, 0, 0, 0.2),
+    0 0 0 max(2px, calc(4 * var(--uiw-u))) #fff;
+}
+/* No room left of the body on a phone in portrait: the tabs sit above it, right of the header. */
+@media (orientation: portrait) {
+  .pw-tabs {
+    left: auto;
+    right: 0;
+    top: calc(-1 * max(44px, 90 * var(--uiw-u)) - 8px);
+    transform: none;
+    flex-direction: row;
+  }
+}

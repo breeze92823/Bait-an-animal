@@ -1,0 +1,845 @@
+/* HUD (hud.js) + world popups (fx.js). Every length is design px x --u, where --u
+   scales with the screen (1px on a 1600x900 view) and stays tappable on phones. */
+.hud {
+  --ink: #1d1a22;
+  --u: clamp(0.55px, calc(min(100vw, 177.78vh) / 1600), 1.3px);
+  --sl: env(safe-area-inset-left, 0px);
+  --sr: env(safe-area-inset-right, 0px);
+  --st: env(safe-area-inset-top, 0px);
+  --sb: env(safe-area-inset-bottom, 0px);
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  pointer-events: none;
+  font-family: 'Fredoka', system-ui, sans-serif;
+  font-weight: 700;
+  line-height: 1;
+  color: #fff;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.hud button {
+  pointer-events: auto;
+  font: inherit;
+  color: inherit;
+  padding: 0;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+.hud [hidden] {
+  display: none !important;
+}
+/* Outlined text: the stroke sits under the fill. */
+.hud-label,
+.hud-badge,
+.free-top,
+.free-word,
+.offer-op,
+.offer-time,
+.offer-price,
+.pass-top,
+.pass-name,
+.pass-price,
+.money-num,
+.hud-rate,
+.boost-title,
+.boost-time,
+.hud-toast,
+.banner-rarity,
+.banner-name,
+.banner-new,
+.bag-lv,
+.bag-key,
+.chip b,
+.chip i {
+  -webkit-text-stroke: var(--ow, calc(7 * var(--u))) var(--oc, var(--ink));
+  paint-order: stroke fill;
+}
+
+/* --- Left column ------------------------------------------------------------------------ */
+.hud-left {
+  position: absolute;
+  left: calc(var(--sl) + 16 * var(--u));
+  top: max(calc(var(--reserved, 0px) + 18px), calc(50% - 200 * var(--u)));
+  display: flex;
+  flex-direction: column;
+  gap: calc(22 * var(--u));
+}
+.hud-btn {
+  position: relative;
+  width: max(52px, calc(112 * var(--u)));
+  height: max(52px, calc(112 * var(--u)));
+  border: max(3px, calc(5 * var(--u))) solid var(--ink);
+  border-radius: calc(16 * var(--u));
+  box-shadow:
+    inset 0 calc(-8 * var(--u)) 0 rgba(0, 0, 0, 0.18),
+    inset 0 calc(5 * var(--u)) 0 rgba(255, 255, 255, 0.35),
+    0 calc(4 * var(--u)) 0 rgba(0, 0, 0, 0.25);
+  transition: transform 0.08s;
+}
+.hud-btn:active {
+  transform: scale(0.93);
+}
+.hud-btn.store {
+  background: linear-gradient(#ffe95a, #ffb21f);
+}
+.hud-btn.pets {
+  background: linear-gradient(#8fe2ff, #2f9cff);
+}
+.hud-btn.index {
+  background: linear-gradient(#d4ff6a, #34cc4a);
+}
+.hud-ico {
+  position: absolute;
+  left: 12%;
+  top: 6%;
+  width: 76%;
+  height: 66%;
+}
+.hud-ico svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.2));
+}
+.hud-label {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 7%;
+  text-align: center;
+  font-size: max(13px, calc(30 * var(--u)));
+  --ow: max(3px, calc(7 * var(--u)));
+}
+.hud-badge {
+  position: absolute;
+  font-size: max(11px, calc(24 * var(--u)));
+  --ow: max(3px, calc(6 * var(--u)));
+  pointer-events: none;
+}
+.hud-badge.sale {
+  right: calc(-30 * var(--u));
+  top: calc(-16 * var(--u));
+  padding: calc(6 * var(--u)) calc(10 * var(--u));
+  border: max(2px, calc(4 * var(--u))) solid var(--ink);
+  border-radius: 999px;
+  background: linear-gradient(#ff5a8a, #e8285a);
+  transform: rotate(8deg);
+  animation: hud-wobble 2.4s ease-in-out infinite;
+}
+.hud-badge.alert {
+  right: calc(-12 * var(--u));
+  top: calc(-12 * var(--u));
+  width: max(20px, calc(40 * var(--u)));
+  height: max(20px, calc(40 * var(--u)));
+  display: grid;
+  place-items: center;
+  border: max(2px, calc(4 * var(--u))) solid var(--ink);
+  border-radius: 50%;
+  background: #ff3b4a;
+  animation: hud-wobble 1.6s ease-in-out infinite;
+}
+@keyframes hud-wobble {
+  0%,
+  70%,
+  100% {
+    transform: rotate(8deg) scale(1);
+  }
+  80% {
+    transform: rotate(-6deg) scale(1.12);
+  }
+  90% {
+    transform: rotate(10deg) scale(1.06);
+  }
+}
+
+/* --- Offers: rotating light rays behind a pet portrait ------------------------------------- */
+.rays {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 115%;
+  aspect-ratio: 1;
+  margin: -57.5% 0 0 -57.5%;
+  border-radius: 50%;
+  background: repeating-conic-gradient(rgba(255, 255, 255, 0.55) 0 8deg, rgba(255, 255, 255, 0) 8deg 24deg);
+  -webkit-mask: radial-gradient(circle, #000 25%, transparent 68%);
+  mask: radial-gradient(circle, #000 25%, transparent 68%);
+  animation: hud-spin 9s linear infinite;
+  pointer-events: none;
+}
+@keyframes hud-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.hud-free,
+.hud-offer {
+  position: absolute;
+  border: 0;
+  background: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transition: transform 0.1s;
+}
+.hud-free:active,
+.hud-offer:active {
+  transform: scale(0.94);
+}
+.hud-free img,
+.hud-offer img {
+  position: relative;
+  width: calc(118 * var(--u));
+  height: calc(118 * var(--u));
+  min-width: 56px;
+  min-height: 56px;
+  object-fit: contain;
+  filter: drop-shadow(0 4px 2px rgba(0, 0, 0, 0.3));
+  animation: hud-bob 2.2s ease-in-out infinite;
+}
+@keyframes hud-bob {
+  50% {
+    transform: translateY(calc(-8 * var(--u))) rotate(-3deg);
+  }
+}
+.hud-free {
+  left: calc(var(--sl) + 160 * var(--u));
+  top: max(calc(var(--reserved, 0px) + 6px), calc(50% - 290 * var(--u)));
+  width: calc(170 * var(--u));
+  min-width: 80px;
+}
+.free-top {
+  order: -1;
+  position: relative;
+  font-size: max(12px, calc(28 * var(--u)));
+  color: #ff3030;
+  --ow: max(3px, calc(6 * var(--u)));
+}
+.free-word {
+  position: relative;
+  margin-top: calc(-14 * var(--u));
+  font-size: max(18px, calc(44 * var(--u)));
+  color: #6dff4f;
+  --ow: max(4px, calc(9 * var(--u)));
+  animation: hud-pulse 1.4s ease-in-out infinite;
+}
+@keyframes hud-pulse {
+  50% {
+    transform: scale(1.1);
+  }
+}
+.hud-offer {
+  right: calc(var(--sr) + 70 * var(--u) + 40px);
+  top: calc(var(--st) + 120 * var(--u));
+  width: calc(190 * var(--u));
+  min-width: 90px;
+}
+.offer-price {
+  position: relative;
+  font-size: max(12px, calc(30 * var(--u)));
+  color: #7dff6a;
+  --ow: max(3px, calc(6 * var(--u)));
+}
+.offer-op {
+  position: relative;
+  margin-top: calc(-26 * var(--u));
+  font-size: max(22px, calc(64 * var(--u)));
+  background: linear-gradient(90deg, #ff4fd8, #4fb6ff, #ffe14a);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  --ow: 0px;
+  filter: drop-shadow(0 0 0 var(--ink)) drop-shadow(2px 2px 0 var(--ink)) drop-shadow(-2px -2px 0 var(--ink)) drop-shadow(2px -2px 0 var(--ink)) drop-shadow(-2px 2px 0 var(--ink));
+}
+.offer-time {
+  position: relative;
+  font-size: max(13px, calc(34 * var(--u)));
+  color: #ff5fd2;
+  --ow: max(3px, calc(6 * var(--u)));
+}
+
+/* --- Right column: passes -------------------------------------------------------------------- */
+.hud-right {
+  position: absolute;
+  right: calc(var(--sr) + 14 * var(--u));
+  top: calc(50% - 40 * var(--u));
+  display: flex;
+  flex-direction: column;
+  gap: calc(30 * var(--u));
+}
+.hud-pass {
+  position: relative;
+  width: calc(250 * var(--u));
+  min-width: 120px;
+  height: calc(96 * var(--u));
+  min-height: 48px;
+  border: max(3px, calc(5 * var(--u))) solid var(--ink);
+  border-radius: calc(10 * var(--u));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  box-shadow:
+    inset 0 calc(-6 * var(--u)) 0 rgba(0, 0, 0, 0.15),
+    inset 0 calc(4 * var(--u)) 0 rgba(255, 255, 255, 0.35);
+  transition: transform 0.08s;
+}
+.hud-pass:active {
+  transform: scale(0.95);
+}
+.hud-pass.cash {
+  background: linear-gradient(#fff07a, #ffc21f 55%, #f39a0c);
+}
+.hud-pass.xp {
+  background: linear-gradient(90deg, #ff4a6a, #ffb21f 22%, #ffe14a 38%, #4ce05a 56%, #2fb6ff 74%, #b05cff);
+}
+.pass-top {
+  position: absolute;
+  top: calc(-20 * var(--u));
+  font-size: max(11px, calc(30 * var(--u)));
+  --ow: max(3px, calc(6 * var(--u)));
+}
+.hud-pass.cash .pass-top {
+  color: #3ff0ff;
+}
+.hud-pass.xp .pass-top {
+  color: #ff3a3a;
+}
+.pass-name {
+  font-size: max(16px, calc(50 * var(--u)));
+  --ow: max(4px, calc(9 * var(--u)));
+}
+.pass-price {
+  position: absolute;
+  bottom: calc(-22 * var(--u));
+  padding: calc(4 * var(--u)) calc(12 * var(--u));
+  border: max(2px, calc(4 * var(--u))) solid var(--ink);
+  border-radius: 999px;
+  background: linear-gradient(#5fff6a, #1fbf3c);
+  font-size: max(11px, calc(26 * var(--u)));
+  --ow: max(3px, calc(5 * var(--u)));
+}
+.hud-pass.poor .pass-price {
+  background: linear-gradient(#ff7a6a, #d42a2a);
+}
+.hud-pass.owned {
+  filter: saturate(0.6) brightness(0.92);
+  cursor: default;
+}
+.hud-pass.owned .pass-price {
+  background: linear-gradient(#ffe46a, #e8a510);
+}
+
+.hud-sound {
+  position: absolute;
+  right: calc(var(--sr) + 14px);
+  top: calc(var(--st) + 14px);
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  border: 2px solid rgba(255, 255, 255, 0.45);
+  border-radius: 50%;
+  background: rgba(16, 18, 28, 0.55);
+}
+.hud-sound svg {
+  width: 62%;
+  height: 62%;
+}
+
+/* --- Bottom left: money + rate + potions -------------------------------------------------- */
+.hud-bottom-left {
+  position: absolute;
+  left: calc(var(--sl) + 20 * var(--u));
+  bottom: calc(var(--sb) + 14 * var(--u));
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: calc(6 * var(--u));
+}
+.hud-money {
+  display: flex;
+  align-items: center;
+  gap: calc(12 * var(--u));
+}
+.money-ico {
+  width: max(34px, calc(80 * var(--u)));
+  height: max(34px, calc(80 * var(--u)));
+}
+.money-ico svg {
+  width: 100%;
+  height: 100%;
+}
+.money-num {
+  font-size: max(24px, calc(66 * var(--u)));
+  color: #6dff4f;
+  --ow: max(5px, calc(11 * var(--u)));
+  letter-spacing: 0.01em;
+}
+.hud-money.gain .money-num {
+  animation: hud-gain 0.35s cubic-bezier(0.3, 1.8, 0.5, 1);
+}
+@keyframes hud-gain {
+  40% {
+    transform: scale(1.12);
+    filter: drop-shadow(0 0 8px rgba(160, 255, 120, 0.9));
+  }
+}
+.hud-money.spend .money-num {
+  animation: hud-spend 0.4s ease-out;
+}
+@keyframes hud-spend {
+  30% {
+    transform: scale(0.9);
+    color: #ff5a5a;
+  }
+}
+.hud-rate {
+  margin-left: calc(96 * var(--u));
+  font-size: max(12px, calc(28 * var(--u)));
+  color: #d4ffb8;
+  --ow: max(3px, calc(6 * var(--u)));
+}
+.hud-potions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(8 * var(--u));
+}
+.chip {
+  display: flex;
+  align-items: center;
+  gap: calc(6 * var(--u));
+  padding: calc(4 * var(--u)) calc(12 * var(--u)) calc(4 * var(--u)) calc(4 * var(--u));
+  border-radius: 999px;
+  background: rgba(16, 18, 28, 0.6);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+}
+.chip svg {
+  width: max(22px, calc(40 * var(--u)));
+  height: max(22px, calc(40 * var(--u)));
+}
+.chip b {
+  font-size: max(12px, calc(24 * var(--u)));
+  --ow: max(3px, calc(5 * var(--u)));
+}
+.chip i {
+  font-style: normal;
+  font-size: max(11px, calc(22 * var(--u)));
+  color: #ffe46a;
+  --ow: max(3px, calc(5 * var(--u)));
+}
+
+/* --- Bait bag -------------------------------------------------------------------------- */
+.hud-bag {
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--sb) + 16 * var(--u));
+  transform: translateX(-50%);
+  display: flex;
+  gap: calc(10 * var(--u));
+  pointer-events: auto;
+}
+.bag-slot {
+  position: relative;
+  width: max(48px, calc(84 * var(--u)));
+  height: max(48px, calc(84 * var(--u)));
+  border: max(2px, calc(4 * var(--u))) solid rgba(255, 255, 255, 0.4) !important;
+  border-radius: calc(16 * var(--u));
+  background: rgba(16, 18, 28, 0.7) !important;
+  transition: transform 0.1s;
+}
+.bag-slot.sel {
+  border-color: #ffe14a !important;
+  box-shadow: 0 0 0 max(2px, calc(3 * var(--u))) rgba(255, 225, 74, 0.35), 0 0 calc(18 * var(--u)) rgba(255, 225, 74, 0.6);
+  transform: translateY(calc(-6 * var(--u)));
+}
+.bag-slot img {
+  position: absolute;
+  left: 8%;
+  top: 4%;
+  width: 84%;
+  height: 84%;
+  object-fit: contain;
+}
+.bag-key {
+  position: absolute;
+  left: calc(6 * var(--u));
+  top: calc(4 * var(--u));
+  font-size: max(10px, calc(20 * var(--u)));
+  --ow: max(2px, calc(5 * var(--u)));
+}
+.bag-lv {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(4 * var(--u));
+  text-align: center;
+  font-size: max(10px, calc(20 * var(--u)));
+  color: #ffe46a;
+  --ow: max(2px, calc(5 * var(--u)));
+}
+.bag-empty {
+  padding: calc(10 * var(--u)) calc(18 * var(--u));
+  border-radius: 999px;
+  background: rgba(16, 18, 28, 0.55);
+  font-size: max(12px, calc(24 * var(--u)));
+  color: #dfe6f5;
+  font-weight: 600;
+}
+
+/* --- Play boost ------------------------------------------------------------------------ */
+.hud-boost {
+  position: absolute;
+  right: calc(var(--sr) + 18 * var(--u));
+  bottom: calc(var(--sb) + 14 * var(--u));
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: calc(6 * var(--u));
+}
+.boost-title {
+  font-size: max(13px, calc(34 * var(--u)));
+  --ow: max(3px, calc(7 * var(--u)));
+}
+.boost-next {
+  display: flex;
+  align-items: center;
+  gap: calc(10 * var(--u));
+}
+.boost-ico {
+  width: max(26px, calc(56 * var(--u)));
+  height: max(26px, calc(56 * var(--u)));
+}
+.boost-ico svg {
+  width: 100%;
+  height: 100%;
+}
+.boost-time {
+  font-size: max(16px, calc(44 * var(--u)));
+  font-style: italic;
+  --ow: max(4px, calc(8 * var(--u)));
+}
+
+/* --- Toast + catch banner -------------------------------------------------------------------- */
+.hud-toast {
+  position: absolute;
+  left: 50%;
+  top: calc(var(--st) + 12%);
+  max-width: calc(100% - 32px);
+  font-size: max(16px, calc(36 * var(--u)));
+  text-align: center;
+  --ow: max(4px, calc(8 * var(--u)));
+  transform: translateX(-50%);
+  opacity: 0;
+  white-space: nowrap;
+}
+.hud-toast.good {
+  color: #7dff6a;
+}
+.hud-toast.bad {
+  color: #ff6a6a;
+}
+.hud-toast.show {
+  animation: hud-toast 2.2s ease-out forwards;
+}
+@keyframes hud-toast {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 12px) scale(0.85);
+  }
+  8%,
+  80% {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -12px);
+  }
+}
+.hud-banner {
+  position: absolute;
+  left: 50%;
+  top: calc(var(--st) + 19%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(4 * var(--u));
+  transform: translateX(-50%);
+  opacity: 0;
+  filter: drop-shadow(0 0 calc(18 * var(--u)) var(--glow, #fff));
+}
+.hud-banner.show {
+  animation: hud-banner 2.6s cubic-bezier(0.2, 1.4, 0.4, 1) forwards;
+}
+@keyframes hud-banner {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) scale(0.3);
+  }
+  12%,
+  82% {
+    opacity: 1;
+    transform: translateX(-50%) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(-50%) scale(1.08) translateY(-10px);
+  }
+}
+.banner-rarity {
+  font-size: max(16px, calc(44 * var(--u)));
+  --ow: max(4px, calc(9 * var(--u)));
+}
+.banner-name {
+  font-size: max(28px, calc(86 * var(--u)));
+  white-space: nowrap;
+  --ow: max(6px, calc(14 * var(--u)));
+}
+.banner-new {
+  padding: calc(4 * var(--u)) calc(14 * var(--u));
+  border-radius: 999px;
+  background: #ff3b4a;
+  border: max(2px, calc(4 * var(--u))) solid var(--ink);
+  font-size: max(13px, calc(30 * var(--u)));
+  --ow: max(3px, calc(6 * var(--u)));
+}
+
+/* --- World popups (fx.js) ------------------------------------------------------------------- */
+.fx-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 15;
+  pointer-events: none;
+  overflow: hidden;
+  --u: clamp(0.55px, calc(min(100vw, 177.78vh) / 1600), 1.3px);
+}
+.fx-pop {
+  position: absolute;
+  left: 0;
+  top: 0;
+  font-family: 'Fredoka', system-ui, sans-serif;
+  font-weight: 700;
+  font-size: max(15px, calc(34 * var(--u)));
+  color: #8dff4f;
+  white-space: nowrap;
+  -webkit-text-stroke: max(4px, calc(8 * var(--u))) #14300a;
+  paint-order: stroke fill;
+  will-change: transform, opacity;
+}
+.fx-pop.xp {
+  color: #9fe6ff;
+  -webkit-text-stroke-color: #0b2a55;
+  font-size: max(13px, calc(28 * var(--u)));
+}
+.fx-pop.big {
+  color: #ffe46a;
+  -webkit-text-stroke-color: #4a2a00;
+  font-size: max(17px, calc(40 * var(--u)));
+}
+.fx-pop.bang {
+  color: #ff3b4a;
+  -webkit-text-stroke-color: #2a0008;
+  font-size: max(40px, calc(110 * var(--u)));
+}
+
+/* --- Touch layouts: keep clear of the joystick (left) and the jump cluster (right) ---------- */
+.touch-ui .hud-bottom-left {
+  bottom: calc(var(--sb) + clamp(150px, 34vmin, 200px));
+}
+.touch-ui .hud-boost {
+  bottom: calc(var(--sb) + clamp(176px, 40vmin, 236px));
+}
+/* The touch day/respawn buttons own the top-right corner: the sound toggle sits under them. */
+.touch-ui .hud-sound {
+  top: calc(var(--st) + 70px);
+}
+.touch-ui .hud-offer {
+  top: calc(var(--st) + 124px);
+}
+@media (orientation: portrait) {
+  .touch-ui .hud-bag {
+    bottom: calc(var(--sb) + clamp(222px, 52vmin, 270px));
+  }
+  /* Passes up under the offer, clear of the prompt that docks above the bait bag. */
+  .hud-right {
+    top: calc(var(--st) + 300px);
+  }
+}
+/* Short landscape screens (phones on their side): Boxity's toolbar + chat fill the top-left
+   200 px, so Store / Pets / Index go in a row beside the toolbar, the free pet under them,
+   and the offer + passes move up the right edge. */
+@media (orientation: landscape) and (max-height: 500px) {
+  .hud-left {
+    flex-direction: row;
+    top: calc(var(--st) + 8px);
+    left: calc(var(--toolbar-right, 330px) + 14px);
+    gap: 12px;
+  }
+  .hud-btn {
+    width: 54px;
+    height: 54px;
+  }
+  .hud-label {
+    font-size: 12px;
+  }
+  .hud-free {
+    top: calc(var(--st) + 72px);
+    left: calc(var(--toolbar-right, 330px) + 4px);
+  }
+  .hud-offer {
+    top: calc(var(--st) + 4px);
+    right: calc(var(--sr) + 66px);
+  }
+  .touch-ui .hud-offer {
+    top: calc(var(--st) + 4px);
+    right: calc(var(--sr) + 128px);
+  }
+  .touch-ui .hud-sound {
+    top: calc(var(--st) + 66px);
+  }
+  .hud-right {
+    top: calc(var(--st) + 150px);
+    gap: 22px;
+  }
+}
+/* Windows open on touch: the HUD steps back. */
+.touch-ui.uiw-open .hud {
+  opacity: 0.25;
+}
+@media (prefers-reduced-motion: reduce) {
+  .rays,
+  .hud-free img,
+  .hud-offer img,
+  .free-word,
+  .hud-badge {
+    animation: none;
+  }
+}
+
+/* --- Training: strength counter, the training bar and Cancel (training.js) ---------------- */
+.str-num,
+.train-str,
+.train-lv,
+.train-xp,
+.hud-cancel {
+  -webkit-text-stroke: var(--ow, calc(7 * var(--u))) var(--oc, var(--ink));
+  paint-order: stroke fill;
+}
+.hud-str {
+  display: flex;
+  align-items: center;
+  gap: calc(12 * var(--u));
+}
+.str-ico {
+  width: max(30px, calc(70 * var(--u)));
+  height: max(30px, calc(70 * var(--u)));
+  margin-left: calc(6 * var(--u));
+}
+.str-ico svg {
+  width: 100%;
+  height: 100%;
+}
+.str-num {
+  font-size: max(22px, calc(58 * var(--u)));
+  color: #4fc8ff;
+  --oc: #0b2050;
+  --ow: max(5px, calc(10 * var(--u)));
+}
+.hud-str.gain .str-num {
+  animation: hud-gain 0.35s cubic-bezier(0.3, 1.8, 0.5, 1);
+}
+.hud-train {
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--sb) + 22 * var(--u));
+  width: min(calc(100% - 32px), calc(940 * var(--u)), 640px);
+  min-width: min(calc(100% - 32px), 300px);
+  transform: translateX(-50%);
+}
+.train-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  padding: 0 calc(6 * var(--u)) calc(6 * var(--u));
+}
+.train-str,
+.train-lv {
+  font-size: max(18px, calc(46 * var(--u)));
+  color: #4fc8ff;
+  --oc: #0b2050;
+  --ow: max(4px, calc(9 * var(--u)));
+}
+.train-bar {
+  position: relative;
+  height: max(30px, calc(62 * var(--u)));
+  border-radius: calc(10 * var(--u));
+  background: rgba(30, 32, 42, 0.92);
+  border: max(3px, calc(5 * var(--u))) solid #fff;
+  box-shadow: 0 0 0 max(2px, calc(3 * var(--u))) var(--ink);
+  overflow: hidden;
+}
+.train-bar i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 0;
+  background: linear-gradient(#5fd0ff, #1f8fff 55%, #1a6fe0);
+  transition: width 0.25s ease-out;
+}
+.train-xp {
+  position: absolute;
+  left: calc(18 * var(--u));
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: max(17px, calc(42 * var(--u)));
+  --ow: max(4px, calc(9 * var(--u)));
+}
+.hud-cancel {
+  position: absolute;
+  left: 50%;
+  top: calc(var(--st) + 16px + 2 * var(--u));
+  transform: translateX(-50%);
+  min-width: 132px;
+  min-height: 48px;
+  padding: calc(10 * var(--u)) calc(56 * var(--u)) !important;
+  font-size: max(22px, calc(54 * var(--u)));
+  border-radius: calc(10 * var(--u));
+  background: linear-gradient(#ff5a5a, #e01e2a 60%, #b8121e);
+  border: max(3px, calc(5 * var(--u))) solid var(--ink);
+  box-shadow: inset 0 0 0 max(2px, calc(4 * var(--u))) rgba(255, 255, 255, 0.85);
+  --ow: max(4px, calc(9 * var(--u)));
+}
+.hud-cancel:active {
+  transform: translateX(-50%) scale(0.95);
+}
+/* Portrait phones: the touch bait-bag slot is where the bar goes. */
+@media (orientation: portrait) {
+  .touch-ui .hud-train {
+    bottom: calc(var(--sb) + clamp(222px, 52vmin, 270px));
+  }
+}
+/* Short landscape: Cancel clears the Store/Pets/Index row beside the toolbar. */
+@media (orientation: landscape) and (max-height: 500px) {
+  .hud-cancel {
+    top: calc(var(--st) + 74px);
+    min-height: 44px;
+  }
+}
+
+/* Strength popups: "+1.2" with a flexed arm. */
+.fx-pop.str {
+  color: #4fc8ff;
+  -webkit-text-stroke-color: #0b2050;
+  font-size: max(18px, calc(46 * var(--u)));
+  display: flex;
+  align-items: center;
+  gap: 0.1em;
+}
+.fx-pop.str::after {
+  content: '';
+  width: 1.05em;
+  height: 1.05em;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath d='M8 56 Q4 44 10 34 L18 16 Q21 9 28 10 L35 12 Q41 15 38 21 L33 25 Q29 28 28 33 L29 37 Q35 27 46 28 Q59 30 59 44 Q58 57 44 59 Q26 61 8 56 Z' fill='%23ffb12e' stroke='%231d1a22' stroke-width='4' stroke-linejoin='round'/%3E%3Cpath d='M37 38 Q45 34 51 40' stroke='%23c96a00' stroke-width='3.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E") center / contain no-repeat;
+}

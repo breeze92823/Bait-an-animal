@@ -1,0 +1,127 @@
+/* Interact prompts (interact.js): the pill over a world object. Under the HUD (20),
+   over the touch zones (10). */
+.ix-prompt {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 19;
+  display: flex;
+  align-items: center;
+  gap: clamp(8px, 0.7vw, 12px);
+  min-height: 52px;
+  padding: 6px clamp(14px, 1.1vw, 20px) 6px 7px;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  border-radius: 16px;
+  background: rgba(16, 18, 28, 0.78);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+  font-family: 'Fredoka', system-ui, sans-serif;
+  font-weight: 700;
+  line-height: 1;
+  color: #fff;
+  cursor: pointer;
+  touch-action: none;
+  white-space: nowrap;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.ix-prompt[hidden] {
+  display: none;
+}
+.ix-key {
+  display: grid;
+  place-items: center;
+  width: clamp(38px, 2.5vw, 46px);
+  height: clamp(38px, 2.5vw, 46px);
+  border-radius: 11px;
+  background: #fff;
+  color: #15151f;
+  font-size: clamp(19px, 1.35vw, 25px);
+  box-shadow: inset 0 -4px 0 #c5cad6;
+}
+/* On touch the pill itself is the button: the key cap reads TAP. */
+.touch-ui .ix-key {
+  width: auto;
+  padding: 0 9px;
+  font-size: 0;
+}
+.touch-ui .ix-key::before {
+  content: 'TAP';
+  font-size: 15px;
+}
+.ix-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+.ix-title {
+  font-size: clamp(12px, 0.85vw, 15px);
+  color: #c9d2e4;
+}
+.ix-verb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: clamp(18px, 1.25vw, 24px);
+}
+.ix-cost {
+  color: #7dff6a;
+}
+.ix-cost.short {
+  color: #ff6262;
+}
+.ix-bar {
+  display: block;
+  width: 100%;
+  min-width: 110px;
+  height: 7px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.18);
+  overflow: hidden;
+}
+.ix-bar[hidden] {
+  display: none;
+}
+.ix-bar i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #4ce05a, #b8ff3a);
+  border-radius: 4px;
+  transition: width 0.12s;
+}
+.ix-prompt.off {
+  cursor: default;
+}
+.ix-prompt.off .ix-key,
+.ix-prompt.dim .ix-key {
+  opacity: 0.45;
+}
+.ix-prompt.off .ix-verb {
+  color: #8fe88f;
+}
+.ix-prompt.dim .ix-verb {
+  color: #b9c2d6;
+}
+.ix-prompt.press .ix-key {
+  animation: ix-press 0.16s ease-out;
+}
+@keyframes ix-press {
+  50% {
+    transform: translateY(3px) scale(0.92);
+    box-shadow: inset 0 -1px 0 #c5cad6;
+  }
+}
+.ix-prompt.shake {
+  animation: ix-shake 0.35s;
+}
+@keyframes ix-shake {
+  20%,
+  60% {
+    margin-left: -6px;
+  }
+  40%,
+  80% {
+    margin-left: 6px;
+  }
+}
