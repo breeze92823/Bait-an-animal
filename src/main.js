@@ -18,6 +18,7 @@ import { createFx } from './fx.js'
 import { createGame } from './game.js'
 import { createTraining } from './training.js'
 import { createBaitFlow } from './baitFlow.js'
+import { createTutorial } from './tutorial.js'
 import { createInteract } from './interact.js'
 import { renderThumbs, THUMBS } from './thumbs.js'
 import { renderZoneThumbs } from './zones.js'
@@ -155,6 +156,8 @@ game.training = training
 game.ui.train = () => training.start()
 // The harpoon shot: aim meter, flight, luck bush, hooked + reel minigame (baitFlow.js).
 const baitFlow = createBaitFlow({ scene, harpoon, game, fx, zones: world.zones })
+// The new-player tutorial: banner, 3D arrow + ground chevrons, screen arrows (tutorial.js).
+const tutorial = createTutorial({ scene, game, base, harpoon, flow: baitFlow, camera, fx })
 // The other players in the room: their Bloxity characters, pets and plots.
 const remotes = createRemotes({ scene, fx, plots: otherPlots })
 
@@ -209,7 +212,9 @@ bloxity.onReservedAreas((areas) => {
   })
   renderer.domElement.addEventListener('pointerup', (e) => {
     if (e.button !== 0 || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 6 || performance.now() - down.t > 450) return
-    ndc.set((e.clientX / window.innerWidth) * 2 - 1, -(e.clientY / window.innerHeight) * 2 + 1)
+    // Cursor locked (mouse look): there is no pointer, so the click aims from screen centre.
+    if (document.pointerLockElement) ndc.set(0, 0)
+    else ndc.set((e.clientX / window.innerWidth) * 2 - 1, -(e.clientY / window.innerHeight) * 2 + 1)
     ray.setFromCamera(ndc, camera)
     const hit = ray.intersectObjects(targets, true)[0]
     if (hit && hit.distance < 45) game.pump()
@@ -327,6 +332,7 @@ renderer.setAnimationLoop(() => {
   Object.assign(presenceMe, { x: shown.x, y: shown.y, z: shown.z, yaw: playerGroup.rotation.y, speed, vy: player.velocity.y, grounded: player.grounded })
   tickPresence(elapsed, presenceMe, baseSnapshot, hookState)
   baitFlow.applyCamera(camera, dt) // blends from the chase cam to the shot's views
+  tutorial.update(dt, elapsed) // after the camera: it projects its target for the edge arrow
   world.update(dt, elapsed, camera) // Lane zone culling + fog (after the camera is final)
   interact.update(dt, camera, training.active || baitFlow.active ? null : p)
   hud.update(dt)
@@ -366,5 +372,5 @@ if (import.meta.env.DEV) {
     resetPlayer({ x, y, z }, facing)
     syncYawToPlayer()
   }
-  window.__game = { audio: audioCore, config, player, scene, renderer, camera, postfx, bodies: bodyCount, toggleMode, teleport, base, game, harpoon, fx, hud, windows, training, baitFlow, remotes, otherPlots, emote: playLocalEmote }
+  window.__game = { audio: audioCore, config, player, scene, renderer, camera, postfx, bodies: bodyCount, toggleMode, teleport, base, game, harpoon, fx, hud, windows, training, baitFlow, tutorial, remotes, otherPlots, emote: playLocalEmote }
 }

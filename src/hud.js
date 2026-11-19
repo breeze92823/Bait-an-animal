@@ -21,10 +21,20 @@ import { isMuted, toggleMuted } from './audio/index.js'
 //  - bottom right: the Play Boost and when it next grows
 //  - toasts and the catch banner at the top centre
 // Boxity's toolbar + chat own the top-left corner: the column starts below them.
+//
+// Phones get the usual mobile-game zones instead (arrange(): .hud.port / .hud.land):
+//  - top-left under Boxity: currencies (money + rate, strength) with buffs (boost, potions)
+//  - left edge: Store / Pets / Index (portrait: a column under the currencies; short
+//    landscape: a row beside Boxity's toolbar)
+//  - right edge: one compact rail of offers + passes (free pet, OP offer, x2 Cash, x2 XP, ad),
+//    under the sound / day / respawn buttons; bought passes leave the HUD
+//  - bottom corners: joystick + jump cluster; bottom centre: the bait bag / training bar
+//  - the middle of the screen stays clear; toasts and banners pass over it briefly
 export function createHud(game, open) {
   const root = document.createElement('div')
   root.className = 'hud'
   root.innerHTML = `
+    <div class="hud-lcol"></div>
     <div class="hud-left">
       <button type="button" class="hud-btn store" data-open="store"><span class="hud-ico">${ICONS.basket}</span><span class="hud-label">Store</span><span class="hud-badge sale">-${Math.round(STORE.sale * 100)}%</span></button>
       <button type="button" class="hud-btn pets" data-open="pets"><span class="hud-ico">${ICONS.paw}</span><span class="hud-label">Pets</span></button>
@@ -125,6 +135,11 @@ export function createHud(game, open) {
     // Short landscape screens lay the side buttons out in a row beside the toolbar.
     const bar = areas.find((a) => a.id === 'toolbar')
     root.style.setProperty('--toolbar-right', `${Math.round(bar ? bar.left + bar.width : 0)}px`)
+    // How far down Boxity reaches along the right edge (its toolbar spans narrow phones): the
+    // touch day/respawn row (touch.css) and the right rail start below it.
+    let topRight = 0
+    for (const a of areas) if (a.left + a.width > window.innerWidth - 100) topRight = Math.max(topRight, a.top + a.height)
+    document.documentElement.style.setProperty('--bx-tr', `${Math.round(topRight)}px`)
   }
 
   // --- Toasts + banner ---------------------------------------------------------------------
@@ -180,6 +195,39 @@ export function createHud(game, open) {
   const passEls = { x2cash: $('.hud-pass.cash'), x2xp: $('.hud-pass.xp') }
   let slow = 0
 
+  // --- Layout: desktop/tablet ('wide') or the phone zones ('port' / 'land') ------------------
+  const lcol = $('.hud-lcol')
+  const leftEl = $('.hud-left')
+  const infoEl = $('.hud-bottom-left')
+  const rightEl = $('.hud-right')
+  const boostEl = $('.hud-boost')
+  let layout = ''
+  function arrange() {
+    const w = window.innerWidth
+    const h = window.innerHeight
+    // Touch tablets in landscape get the phone zones too (joystick + jump cluster own the
+    // bottom corners there); a mouse on a big screen keeps the full-size layout.
+    const touch = document.body.classList.contains('touch-ui')
+    const next = h > w ? 'port' : h <= 500 || touch ? 'land' : 'wide'
+    if (next === layout) return
+    layout = next
+    root.classList.toggle('compact', next !== 'wide')
+    root.classList.toggle('port', next === 'port')
+    root.classList.toggle('land', next === 'land')
+    // Moved pieces stay before the toast + banner so those draw on top.
+    if (next === 'wide') {
+      toastEl.before(leftEl, infoEl, boostEl, offer, free)
+      infoEl.prepend(potionsEl)
+      return
+    }
+    rightEl.prepend(free, offer)
+    infoEl.append(boostEl, potionsEl)
+    if (next === 'port') lcol.append(infoEl, leftEl)
+    else toastEl.before(leftEl, infoEl)
+  }
+  arrange()
+  window.addEventListener('resize', arrange)
+
   return {
     root,
     toast,
@@ -217,11 +265,13 @@ export function createHud(game, open) {
       slow -= dt
       if (slow > 0) return
       slow = 0.2
+      arrange() // touch-ui comes and goes with the last pointer type
       set('rate', $('.hud-rate'), `+${money(game.totalIncome())}/s`)
       // Passes.
       for (const [id, el] of Object.entries(passEls)) {
         const owned = S.passes[id]
-        el.classList.toggle('owned', owned)
+        // Bought: the card leaves the HUD (the Store still lists it).
+        el.hidden = owned
         el.classList.toggle('poor', !owned && game.money < PASSES[id].price)
         set(`pass-${id}`, el.querySelector('.pass-price'), owned ? 'OWNED' : money(PASSES[id].price))
       }

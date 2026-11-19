@@ -275,8 +275,10 @@ export const CAMERA = {
   speedFov: 6, // degrees the FOV widens at sprint speed
   speedEase: 3, // 1/s the speed framing eases in and out
   clearEase: 6, // 1/s the boom eases back out once a wall stops blocking it
-  // false: the cursor stays free (HUD + world clicks); left- or right-drag orbits.
-  pointerLock: false,
+  // true: a click on the world grabs the cursor for mouse look and Esc gives it back (the
+  // portal's "Click to control Camera / Esc to release" hint). false: the cursor stays free
+  // (HUD + world clicks); left- or right-drag orbits.
+  pointerLock: true,
 }
 
 // --- Bloxity (bloxity.js, avatar/) -------------------------------------------------
@@ -375,7 +377,7 @@ export const FONT_FAMILY = 'Fredoka'
 // Currency: money ($) only. Nothing in the game costs a premium currency: every
 // item that would be a paid pass elsewhere is priced in money here (project rule).
 
-export const SAVE = { key: 'bait-an-animal.save.v1', every: 4 } // localStorage key, autosave s
+export const SAVE = { every: 4 } // autosave interval s (saves go to the game server only, never localStorage)
 
 // Game server (net.js -> ../Bait-an-animal-backend, room "world"). VITE_SERVER_URL (e.g.
 // ws://localhost:2567) overrides the Bloxity matchmaker; with neither, progress stays in this browser.
@@ -658,6 +660,11 @@ export const HARPOON = {
 // The "Next Shot 100x Luck" boost on the aim screen, bought with money (never premium currency):
 // price = max(base, the pen's income per second * incomeSeconds), rounded.
 export const NEXT_SHOT = { luck: 100, base: 900, incomeSeconds: 150 }
+
+// The new-player tutorial (tutorial.js): pump the machine `pumps` times -> claim a bait ->
+// attach it at the harpoon -> shoot -> reel the animal in -> keep catching until the Auto
+// Machine is affordable -> buy it. Progress is S.tutorial (a step; `done` = finished or skipped).
+export const TUTORIAL = { pumps: 5, done: 100 }
 
 // Interact prompts: distance (m) at which each kind shows.
 export const INTERACT = {
