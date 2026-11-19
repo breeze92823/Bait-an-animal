@@ -1,11 +1,12 @@
 import { CanvasTexture, Group, IcosahedronGeometry, Mesh, MeshLambertMaterial, MeshStandardMaterial, PlaneGeometry, SRGBColorSpace } from 'three'
-import { BASE, HUB, LANE, PATH } from './config.js'
+import { BASE, HUB, LANE, PATH, PLOTS, UPGRADES, ZONES, penSouth } from './config.js'
+import { buildZones } from './zones.js'
 import { RAPIER, addFixed } from './physics.js'
 import { mulberry32 } from './textures.js'
 import { paintJungle } from './paint.js'
 import { bake } from './bake.js'
 import { box, cube, mat } from './voxel.js'
-import { solidBox, solidPole } from './propkit.js'
+import { colliderShift, solidBox, solidPole } from './propkit.js'
 
 // The hub: a studded green field boxed in by two tiers of terracotta cliffs with
 // grassy tops. The yellow path runs east-west along the north side; north of the
@@ -15,6 +16,8 @@ import { solidBox, solidPole } from './propkit.js'
 // field at the pen, the machine, the path and the canyon. Voxel trees, lavender rocks, logs, bushes and flowers fill the park west
 // of the lane and the edges. All static scenery is baked to a few meshes; the
 // colliders are plain boxes.
+// Five plots stand side by side along the path (PLOTS.xs): each has the same base, harpoon,
+// canyon and Lane; the player's is the middle one (x = 0), the rest are copies.
 
 const C = HUB.colors
 
@@ -24,9 +27,9 @@ function makeClouds() {
   const geo = new IcosahedronGeometry(1, 3)
   const material = new MeshLambertMaterial({ color: '#ffffff', emissive: '#dcebff', emissiveIntensity: 0.62, fog: false })
   const group = new Group()
-  for (let i = 0; i < 24; i++) {
+  for (let i = 0; i < 36; i++) {
     const ang = rand() * Math.PI * 2
-    const dist = 230 + rand() * 170
+    const dist = 300 + rand() * 200
     const cloud = new Group()
     const puffs = 5 + Math.floor(rand() * 4)
     const len = 22 + rand() * 26
@@ -81,18 +84,22 @@ function buildWalls(root) {
   const rand = mulberry32(31)
   const { minX, maxX, minZ, maxZ, wallHeight: h1, wallHeight2: h2, wallDepth: D } = HUB
   const ch = LANE.canyonHalf
+  const xs = PLOTS.xs
   // Tier 1 (inner ring).
   cliff(root, minX - D, maxZ, maxX + D, maxZ + D, h1, rand) // south
   cliff(root, minX - D, minZ, minX, maxZ, h1, rand) // west
   cliff(root, maxX, minZ, maxX + D, maxZ, h1, rand) // east
-  cliff(root, minX - D, minZ - D, -ch, minZ, h1, rand) // north, west of the canyon
-  cliff(root, ch, minZ - D, maxX + D, minZ, h1, rand) // north, east of the canyon
+  // North: one run between each pair of canyons (a canyon per plot).
+  const edges = [minX - D, ...xs.flatMap((x) => [x - ch, x + ch]), maxX + D]
+  for (let i = 0; i < edges.length; i += 2) cliff(root, edges[i], minZ - D, edges[i + 1], minZ, h1, rand)
   // Tier 2 (set back, taller).
   cliff(root, minX - 2 * D, maxZ + D, maxX + 2 * D, maxZ + 2 * D, h2, rand)
   cliff(root, minX - 2 * D, minZ - D, minX - D, maxZ + D, h2, rand)
   cliff(root, maxX + D, minZ - D, maxX + 2 * D, maxZ + D, h2, rand)
-  cliff(root, minX - 2 * D, minZ - 2 * D, -ch - D, minZ - D, h2, rand)
-  cliff(root, ch + D, minZ - 2 * D, maxX + 2 * D, minZ - D, h2, rand)
+  const edges2 = [minX - 2 * D, ...xs.flatMap((x) => [x - ch - D, x + ch + D]), maxX + 2 * D]
+  for (let i = 0; i < edges2.length; i += 2) cliff(root, edges2[i], minZ - 2 * D, edges2[i + 1], minZ - D, h2, rand)
+  // A plateau between neighbouring canyons, so no gap shows between their cliffs.
+  for (let i = 0; i + 1 < xs.length; i++) cliff(root, xs[i] + ch + 22, LANE.canyonEnd - 2, xs[i + 1] - ch - 22, minZ - 2 * D, h2, rand)
 
   buttresses(root, rand, 'x', maxZ, minX, maxX, -1)
   buttresses(root, rand, 'z', minX, minZ, maxZ, 1)
@@ -112,51 +119,22 @@ function buildLaneArea(root) {
   cliff(root, ch, z1, ch + 9, z0, h1, rand)
   cliff(root, -ch - 22, z1 - 4, -ch - 9, z0 - 9, h2, rand)
   cliff(root, ch + 9, z1 - 4, ch + 22, z0 - 9, h2, rand)
-  // Wild area walls.
-  cliff(root, -W - 9, LANE.end, -W, z1 + 2, h1 + 2, rand)
-  cliff(root, W, LANE.end, W + 9, z1 + 2, h1 + 2, rand)
+  // Walls closing the gap between the canyon and the (wider) zones north of it.
   cliff(root, -W - 9, z1 - 2, -ch - 9, z1 + 6, h1 + 2, rand)
   cliff(root, ch + 9, z1 - 2, W + 9, z1 + 6, h1 + 2, rand)
-  cliff(root, -W - 9, LANE.end - 9, W + 9, LANE.end, h2, rand)
 
   // Ground: the canyon floor and the wild meadow.
-  const wm = mat.checker(LANE.wildColor)
+  const wm = mat.checker(ZONES[0].ground)
   box(root, ch * 2, 2, z0 - z1, 0, -1, (z0 + z1) / 2, wm, { shadow: false })
-  box(root, W * 2, 2, z1 - LANE.end, 0, -1, (z1 + LANE.end) / 2, wm, { shadow: false })
   // Blue panels lining the canyon walls.
   const blue = mat.studs(LANE.canyonWall)
   for (const sx of [-1, 1]) box(root, 0.4, h1 - 1.5, z0 - z1 - 2, sx * (ch - 0.2), (h1 - 1.5) / 2, (z0 + z1) / 2 - 1, blue)
   // Dirt patch where the spear lands, and a worn trail up the canyon.
-  box(root, 14, 0.06, 26, 0, 0.03, z1 - 22, mat.plain('#8a5232', 0.95), { shadow: false })
   box(root, 6, 0.07, z0 - z1 - 4, 0, 0.035, (z0 + z1) / 2, mat.plain('#7cc25a', 0.95), { shadow: false })
 
-  // Tall grass and jungle plants (placeholder for the detailed Lane).
+  // A few plants along the canyon walls.
   const blade = mat.plain('#2fae4e', 0.8)
   const bladeLight = mat.plain('#56d36a', 0.8)
-  for (let i = 0; i < 90; i++) {
-    const x = (rand() * 2 - 1) * (W - 2)
-    const z = z1 - 2 - rand() * (z1 - LANE.end - 6)
-    if (Math.abs(x) < LANE.corridor) continue
-    const h = 1.2 + rand() * 3.5
-    cube(root, 0.25, h, 0.25, x, h / 2, z, rand() < 0.5 ? blade : bladeLight).rotation.set((rand() - 0.5) * 0.5, rand() * 3, (rand() - 0.5) * 0.5)
-  }
-  const trunk = mat.wood('#9a6a3e')
-  const frond = mat.plain('#2f9a48', 0.8)
-  for (let i = 0; i < 16; i++) {
-    const side = i % 2 ? 1 : -1
-    const x = side * (LANE.corridor + 2 + rand() * (W - LANE.corridor - 5))
-    const z = z1 - 4 - rand() * (z1 - LANE.end - 12)
-    const h = 5 + rand() * 4
-    box(root, 0.7, h, 0.7, x, h / 2, z, trunk)
-    for (let k = 0; k < 5; k++) {
-      const a = (k / 5) * Math.PI * 2 + rand()
-      const leaf = cube(root, 3.6, 0.25, 1.1, x + Math.cos(a) * 1.6, h - 0.2, z + Math.sin(a) * 1.6, frond)
-      leaf.rotation.set(0, -a, -0.45)
-    }
-    solidPole(0.5, h, x, z)
-  }
-
-  // A few plants along the canyon walls.
   for (let i = 0; i < 26; i++) {
     const x = (rand() < 0.5 ? -1 : 1) * (ch - 1 - rand() * 1.5)
     const z = z0 - 3 - rand() * (z0 - z1 - 6)
@@ -164,12 +142,7 @@ function buildLaneArea(root) {
     cube(root, 0.3, h, 0.3, x, h / 2, z, rand() < 0.5 ? blade : bladeLight).rotation.set((rand() - 0.5) * 0.6, rand() * 3, (rand() - 0.5) * 0.6)
   }
 
-  // Jungle backdrop on the far wall.
-  const tex = new CanvasTexture(paintJungle())
-  tex.colorSpace = SRGBColorSpace
-  const backdrop = new Mesh(new PlaneGeometry(W * 2 + 14, h2 + 2), new MeshStandardMaterial({ map: tex, roughness: 1, emissive: '#ffffff', emissiveMap: tex, emissiveIntensity: 0.35 }))
-  backdrop.position.set(0, (h2 + 2) / 2 - 0.5, LANE.end + 0.05)
-  root.add(backdrop)
+
 }
 
 // --- Scenery ----------------------------------------------------------------------------
@@ -177,10 +150,13 @@ function buildLaneArea(root) {
 function blocked(x, z, r) {
   if (z < PATH.z + PATH.halfWidth + 4 + r) return true // the path and the strip behind it
   const p = BASE.pen
-  // The base plot and a wide margin round it stay open (camera views, walking room).
-  if (Math.abs(x - p.x) < p.half + 13 + r && z < p.z + p.half + 6 + r) return true
-  // The spawn and the view from it.
-  if (Math.abs(x) < 16 + r && z > p.z + p.half && z < 30 + r) return true
+  // Every base plot and a wide margin round it stay open (camera views, walking room).
+  for (const ox of PLOTS.xs) {
+    if (Math.abs(x - ox - p.x) < p.half + 13 + r && z < p.z + p.half + 6 + r) return true
+    // The open field in front of the base (the spawn, on the player's plot) and the view from it.
+    // It reaches past the fully expanded pen (Expand Pen) and the spawn south of it.
+    if (Math.abs(x - ox) < 16 + r && z > p.z + p.half && z < penSouth(UPGRADES.pen.max) + 11 + r) return true
+  }
   if (Math.hypot(x - STATUE.x, z - STATUE.z) < 11 + r) return true
   if (x > RECORDS.x - 7 - r && x < RECORDS.x + 7 + r && z < RECORDS.z + 5 + r) return true
   if (x < HUB.minX + 3 + r || x > HUB.maxX - 3 - r || z < HUB.minZ + 3 + r || z > HUB.maxZ - 3 - r) return true
@@ -250,14 +226,18 @@ function flower(root, x, z, rand) {
   cube(root, s * 0.6, s * 0.7, s * 0.6, x, 0.22, z, mat.plain('#ffe14a', 0.6), false)
 }
 
+// Distance along x from (x) to the nearest plot's centre.
+const plotDist = (x) => Math.min(...PLOTS.xs.map((ox) => Math.abs(x - ox)))
+
 function buildScenery(root) {
   const rand = mulberry32(88)
+  const k = (HUB.maxX - HUB.minX) / 116 // the field is k times the one-plot hub it was tuned on
   const spot = (r, tries = 40) => {
     for (let i = 0; i < tries; i++) {
       const x = HUB.minX + rand() * (HUB.maxX - HUB.minX)
       const z = HUB.minZ + rand() * (HUB.maxZ - HUB.minZ)
-      // The field gets sparser toward the middle, where the base is.
-      if (Math.abs(x) < 30 && rand() < 0.5) continue
+      // The field gets sparser toward each plot, where the bases are.
+      if (plotDist(x) < 30 && rand() < 0.5) continue
       if (!blocked(x, z, r)) return [x, z]
     }
     return null
@@ -270,11 +250,11 @@ function buildScenery(root) {
     const p = spot(1.6)
     if (p) rockCluster(root, p[0], p[1], 0.7 + rand() * 0.6, rand)
   }
-  for (let i = 0; i < 14; i++) {
+  for (let i = 0; i < 14 * k; i++) {
     const p = spot(2.5)
     if (p) log(root, p[0], p[1], rand)
   }
-  for (let i = 0; i < 26; i++) {
+  for (let i = 0; i < 26 * k; i++) {
     const p = spot(1)
     if (!p) continue
     const s = 0.9 + rand() * 0.9
@@ -285,26 +265,32 @@ function buildScenery(root) {
     if (p) flower(root, p[0], p[1], rand)
   }
   // Flowers along the path's south verge and round the pen.
-  for (let i = 0; i < 50; i++) {
+  for (let i = 0; i < 50 * k; i++) {
     const x = HUB.minX + 4 + rand() * (HUB.maxX - HUB.minX - 8)
     const z = PATH.z + PATH.halfWidth + 1.4 + rand() * 1.6
-    if (Math.abs(x) < 20) continue
+    if (plotDist(x) < 20) continue
     flower(root, x, z, rand)
   }
   const pen = BASE.pen
-  for (let i = 0; i < 24; i++) {
-    const a = rand() * Math.PI * 2
-    const d = pen.half + 1.2 + rand() * 2
-    const x = pen.x + Math.max(-1, Math.min(1, Math.cos(a) * 1.5)) * d
-    const z = pen.z + Math.max(-1, Math.min(1, Math.sin(a) * 1.5)) * d
-    if (z < pen.z - pen.half + 0.5) continue // keep the gate side clear
-    flower(root, x, z, rand)
+  for (const ox of PLOTS.xs) {
+    const pr = mulberry32(91) // the same flower ring round every pen
+    for (let i = 0; i < 24; i++) {
+      const a = pr() * Math.PI * 2
+      const d = pen.half + 1.2 + pr() * 2
+      const x = ox + pen.x + Math.max(-1, Math.min(1, Math.cos(a) * 1.5)) * d
+      const z = pen.z + Math.max(-1, Math.min(1, Math.sin(a) * 1.5)) * d
+      if (z < pen.z - pen.half + 0.5) continue // keep the gate side clear
+      flower(root, x, z, pr)
+    }
   }
-  // Wooden fences along the path's south edge, open in front of the base.
+  // Wooden fences along the path's south edge, open in front of every base.
   const rail = mat.wood('#c8673a')
   const post = mat.wood('#94461f')
   const fz = PATH.z + PATH.halfWidth + 0.6
-  for (const [x0, x1] of [[HUB.minX + 2, -22], [22, HUB.maxX - 2]]) {
+  const fx = [HUB.minX + 2, ...PLOTS.xs.flatMap((x) => [x - 22, x + 22]), HUB.maxX - 2]
+  const runs = []
+  for (let i = 0; i < fx.length; i += 2) runs.push([fx[i], fx[i + 1]])
+  for (const [x0, x1] of runs) {
     const n = Math.round((x1 - x0) / 2.75)
     const seg = (x1 - x0) / n
     for (let i = 0; i <= n; i++) box(root, 0.42, 1.6, 0.42, x0 + i * seg, 0.8, fz, post)
@@ -383,7 +369,7 @@ function buildGround(root) {
   const kerb = mat.plain('#e9a90f', 0.8)
   for (const z of [n + 0.18, s - 0.18]) box(root, maxX - minX, 0.04, 0.35, (minX + maxX) / 2, 0.02, z, kerb, { shadow: false })
   // One big floor collider under everything.
-  addFixed(RAPIER.ColliderDesc.cuboid(200, 1, 200), { x: 0, y: -1, z: 0 }, null, { friction: 0.9 })
+  addFixed(RAPIER.ColliderDesc.cuboid(HUB.maxX + 3 * HUB.wallDepth, 1, 200), { x: 0, y: -1, z: 0 }, null, { friction: 0.9 })
 }
 
 // Builds the whole hub into `scene`. Returns { records, update }.
@@ -393,7 +379,14 @@ export function createWorld(scene) {
   buildGround(floor)
   const statics = new Group()
   buildWalls(statics)
-  buildLaneArea(statics)
+  for (const x of PLOTS.xs) {
+    const lane = new Group() // every plot's canyon is the same build, moved along x
+    lane.position.x = x
+    statics.add(lane)
+    colliderShift.x = x
+    buildLaneArea(lane)
+    colliderShift.x = 0
+  }
   buildScenery(statics)
   for (const [group, cast] of [[floor, false], [statics, true]]) {
     const baked = bake(group, cast)
@@ -404,8 +397,16 @@ export function createWorld(scene) {
   }
   const records = buildRecords(scene)
   scene.add(makeClouds())
+  const zones = buildZones(scene) // the player's Lane: ten zones north of the canyon
+  // The other plots' Lanes: the same zones, decor only.
+  const others = PLOTS.xs.filter((x) => x !== PLOTS.own).map((ox) => buildZones(scene, { ox, decor: true }))
   return {
     records,
-    update() {},
+    zones,
+    update(dt, t, camera) {
+      if (!camera) return
+      zones.update(camera, dt)
+      for (const z of others) z.update(camera, dt)
+    },
   }
 }

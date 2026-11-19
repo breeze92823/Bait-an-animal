@@ -128,7 +128,7 @@ export function createHarpoon(scene, def) {
 
   // Glowing trail behind the spear in flight: tapered additive segments along its arc.
   const TRAIL = 22
-  const trailMat = new MeshBasicMaterial({ color: new Color(2.2, 2.6, 1.6), transparent: true, opacity: 0.85, blending: AdditiveBlending, depthWrite: false, toneMapped: false })
+  const trailMat = new MeshBasicMaterial({ color: new Color(1.5, 1.8, 1.1), transparent: true, opacity: 0.85, blending: AdditiveBlending, depthWrite: false, toneMapped: false })
   const trail = []
   for (let i = 0; i < TRAIL; i++) {
     const m = new Mesh(ropeGeo, trailMat)
@@ -206,9 +206,10 @@ export function createHarpoon(scene, def) {
   const hideTrail = () => trail.forEach((m) => (m.visible = false))
   function dropBait() {
     if (!st.bait) return
-    baitHolder.remove(st.bait)
+    st.bait.removeFromParent()
     st.bait = null
     st.baitKind = -1
+    st.baitGround = false
   }
 
   const H = {
@@ -227,6 +228,10 @@ export function createHarpoon(scene, def) {
       return out.copy(seatLocal).applyMatrix4(root.matrixWorld)
     },
     muzzle: getMuzzle,
+    // Where the bait lies on the ground after landing (null once eaten / before landing).
+    baitPos(out) {
+      return st.bait && st.baitGround ? out.copy(st.bait.position) : null
+    },
     // World position where a catch arrives (in front of the harpoon).
     deliveryPoint(out) {
       return out.set(def.x, 0, def.z).addScaledVector(forward, 3.6)
@@ -309,7 +314,7 @@ export function createHarpoon(scene, def) {
       if (st.bait) {
         st.loadT = Math.min(1, st.loadT + dt / 0.4)
         const k = st.loadT
-        st.bait.scale.setScalar(0.85 * (k < 0.7 ? (k / 0.7) * 1.2 : 1.2 - ((k - 0.7) / 0.3) * 0.2))
+        st.bait.scale.setScalar((st.baitGround ? 1.3 : 0.85) * (k < 0.7 ? (k / 0.7) * 1.2 : 1.2 - ((k - 0.7) / 0.3) * 0.2))
         st.bait.wiggle(t)
       }
       if (st.trailFade > 0 && st.state !== 'flight') {
@@ -363,6 +368,17 @@ export function createHarpoon(scene, def) {
           st.state = 'landed'
           st.t = 0
           tipGlow.visible = false
+          // The bait slips off the tip onto the ground just short of it, where it wriggles.
+          if (st.bait) {
+            spear.updateMatrixWorld(true)
+            tmp2.set(0, 0, 1.0).applyMatrix4(spear.matrixWorld)
+            vel.set(st.land.x - st.start.x, 0, st.land.z - st.start.z).normalize()
+            scene.add(st.bait)
+            st.bait.position.set(tmp2.x, 0.02, tmp2.z).addScaledVector(vel, -0.55)
+            st.bait.rotation.set(0, Math.random() * Math.PI * 2, 0)
+            st.baitGround = true
+            st.loadT = 0.5 // a little pop as it lands
+          }
           st.cb?.onLand?.(spear.position)
         }
         return

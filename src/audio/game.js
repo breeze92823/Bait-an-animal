@@ -6,7 +6,7 @@
 //  - money: income clinks (soft, rate-limited), selling, buying
 //  - animal calls: formant-shaped oscillators per species
 //  - footsteps on grass / the studded lane
-import { COARSE_POINTER } from '../config.js'
+import { ANIMALS, COARSE_POINTER } from '../config.js'
 import { A, now, voice } from './core.js'
 import { bubble, bubbles, burst, crinkle, modal, pick, rnd, route, tone, vary } from './synth.js'
 import { BELL, COIN, GLASS, PLASTIC, WOOD, buzz, claim, coins, glock, limit } from './sfx.js'
@@ -244,11 +244,32 @@ const CALLS = {
     burst({ t, noise: 'pink', type: 'bandpass', f: 300, f2: 1400, sweep: 0.5, q: 0.8, a: 0.1, hold: 0.5, d: 0.7, gain: 0.35 * g, pan: p, verb: 0.4 })
     burst({ t, noise: 'brown', type: 'lowpass', f: 250, a: 0.1, hold: 0.6, d: 0.8, gain: 0.4 * g, pan: p })
   },
+
+  // Base models added with the Lane zones.
+  cat: (t, g, p) => voiced({ t, type: 'sawtooth', f: 520, f2: 760, glide: 0.12, hold: 0.08, d: 0.25, vib: 12, bp: 1400, bpq: 3, gain: 0.1 * g, pan: p }),
+  horse: (t, g, p) => {
+    for (let i = 0; i < 5; i++) voiced({ t: t + i * 0.07, type: 'sawtooth', f: 900 - i * 90, f2: 760 - i * 90, d: 0.07, vib: 30, bp: 1500, bpq: 2, gain: 0.08 * g, pan: p })
+  },
+  bird: (t, g, p) => {
+    for (let i = 0; i < 3; i++) voiced({ t: t + i * 0.11, type: 'sine', f: 2400 + i * 300, f2: 3200, d: 0.06, bp: 3000, bpq: 1, gain: 0.08 * g, pan: p })
+  },
+  ape: (t, g, p) => {
+    for (let i = 0; i < 4; i++) voiced({ t: t + i * 0.13, type: 'sawtooth', f: 260 + i * 70, f2: 380 + i * 70, d: 0.1, bp: 800, bpq: 2, gain: 0.1 * g, pan: p })
+  },
+  frog: (t, g, p) => voiced({ t, type: 'square', f: 140, f2: 110, hold: 0.12, d: 0.12, vib: 40, vibHz: 28, bp: 600, bpq: 3, gain: 0.1 * g, pan: p }),
+  crab: (t, g, p) => {
+    for (let i = 0; i < 4; i++) burst({ t: t + i * 0.05, f: 3500, q: 3, d: 0.01, gain: 0.08 * g, pan: p })
+  },
+  fish: (t, g, p) => bubbles({ t, n: 8, dur: 0.4, f0: 300, f1: 1400, gain: 0.07 * g }),
+  jelly: (t, g, p) => bubbles({ t, n: 6, dur: 0.5, f0: 600, f1: 2400, gain: 0.05 * g }),
+  snake: (t, g, p) => burst({ t, noise: 'white', type: 'highpass', f: 4000, a: 0.05, hold: 0.3, d: 0.2, gain: 0.06 * g, pan: p }),
+  longneck: (t, g, p) => voiced({ t, type: 'triangle', f: 180, f2: 140, hold: 0.2, d: 0.3, bp: 500, bpq: 2, gain: 0.1 * g, pan: p }),
 }
 
 export function animalCall(species, gain = 1, pan = 0) {
   if (gain < 0.04 || !limit(`call-${species}`, 600) || !voice(1.4, 1)) return
-  ;(CALLS[species] ?? CALLS.chicken)(now(), Math.min(1, gain), pan)
+  const base = ANIMALS.find((a) => a.id === species)?.base
+  ;(CALLS[species] ?? CALLS[base] ?? CALLS.chicken)(now(), Math.min(1, gain), pan)
 }
 
 // --- Footsteps ---------------------------------------------------------------------------
@@ -502,4 +523,23 @@ export function caught() {
   burst({ t, noise: 'pink', f: 400, f2: 6000, q: 0.8, a: 0.25, d: 0.25, gain: 0.18, verb: 0.3 })
   glock(t + 0.2, [12, 16, 19, 24, 28], 0.05, 0.12, 0.4)
   bubbles({ t: t + 0.2, n: COARSE_POINTER ? 10 : 20, dur: 0.5, f0: 1500, f1: 6000, gain: 0.03 })
+}
+
+// The catch sniffs the bait: three quick snuffles.
+export function sniff() {
+  if (!voice(0.6, 1)) return
+  const t = now()
+  for (let i = 0; i < 3; i++) burst({ t: t + i * 0.13, noise: 'pink', type: 'bandpass', f: vary(2400, 0.15), q: 1.5, a: 0.02, d: 0.06, gain: 0.12 })
+}
+// It bites the bait: a wet crunch, crumbs, a jaw snap.
+export function chomp() {
+  if (!voice(0.6, 3)) return
+  claim()
+  const t = now()
+  modal({ t, f: vary(420, 0.05), modes: WOOD, gain: 0.3, strike: 0.3 })
+  crinkle({ t, n: COARSE_POINTER ? 8 : 16, dur: 0.18, gain: 0.08, f0: 1500, f1: 5000 })
+  burst({ t, noise: 'brown', type: 'lowpass', f: 900, a: 0.003, d: 0.12, gain: 0.28 })
+  bubble({ t: t + 0.05, f: 300, d: 0.08, gain: 0.15, rise: 1.2 })
+  modal({ t: t + 0.16, f: vary(520, 0.05), modes: WOOD, gain: 0.2, strike: 0.2 })
+  buzz(25)
 }

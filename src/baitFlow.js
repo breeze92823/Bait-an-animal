@@ -1,4 +1,5 @@
-import { AdditiveBlending, Group, Mesh, MeshBasicMaterial, Object3D, PlaneGeometry, PointLight, Vector3 } from 'three'
+import { AdditiveBlending, Color, Group, Mesh, MeshBasicMaterial, Object3D, PerspectiveCamera, PlaneGeometry, PointLight, Vector3 } from 'three'
+import { sendFx } from './presence.js'
 import './baitFlow.css'
 import { BAITS, CAMERA, HARPOON, LANE, RARITIES, ZONES, laneLength, zoneAt, zoneStart } from './config.js'
 import { animalDef, buildAnimal } from './animals.js'
@@ -20,11 +21,15 @@ import * as bloxity from './bloxity.js'
 //  fire    - the turret swings and fires; the spear flies with a glowing trail, the camera
 //            chasing it; the distance (m) counts up on a bar of the Lane's zones and the
 //            luck multiplier grows with it.
-//  land    - the spear sticks next to a bush; the multiplier fades.
-//  charge  - the bush glows brighter and brighter (green -> white, light streaks rising,
-//            the screen edges warm) while its luck counts up to a rolled final value.
-//  hooked  - flash: the catch (rolled with that luck in the landing zone) leaps out with the
-//            spear in its mouth. "1 in N" + "HOOKED!".
+//  land    - the spear sticks in open ground a few metres from a hiding spot (a bush, coral,
+//            snow mound, rock... of the zone, zones.js); the bait drops off its tip and
+//            wriggles on the ground; the multiplier fades.
+//  charge  - that spot glows brighter and brighter (its colour -> white, light streaks rising,
+//            the screen edges warm) while its luck counts up to a rolled final value; near
+//            the end it shakes and rustles: something is hiding inside.
+//  emerge  - flash: the catch (rolled with that luck in the landing zone) bursts out of the
+//            spot in a spray of leaves / dust ("1 in N"), runs to the bait, sniffs it...
+//  hooked  - ...and bites: crunch, the line snaps taut, "HOOKED!".
 //  reel    - it reels itself in; clicking/tapping (or Space/E) reels faster. The catch tugs
 //            back now and then ("Pull Harder!"). It is dragged up the Lane to the harpoon.
 //  caught  - it glows white at the harpoon, then jumps into the pen (game.deliverCatch).
@@ -49,6 +54,8 @@ const RATINGS = [
   { text: 'Perfect!', cls: 'perfect' },
 ]
 const SEGMENTS = 5
+const WHITE = new Color(1, 1, 1)
+const GLOW = new Color(0.6, 1, 0.4) // the charging spot's emissive at full glow
 const clamp01 = (x) => (x < 0 ? 0 : x > 1 ? 1 : x)
 const lerp = (a, b, k) => a + (b - a) * k
 const easeOut = (k) => 1 - Math.pow(1 - k, 3)
@@ -64,7 +71,7 @@ function rollBush() {
   return 1.2
 }
 
-export function createBaitFlow({ scene, harpoon, game, fx }) {
+export function createBaitFlow({ scene, harpoon, game, fx, zones }) {
   // --- DOM -------------------------------------------------------------------------------------
   const root = document.createElement('div')
   root.className = 'bf'
@@ -76,6 +83,7 @@ export function createBaitFlow({ scene, harpoon, game, fx }) {
       <div class="bf-meter-bar"><div class="bf-meter-dim"></div><div class="bf-meter-fill"></div>${'<s></s>'.repeat(SEGMENTS - 1)}</div></div>
     <button type="button" class="bf-part bf-boost"><span class="bf-boost-rays"></span><span class="bf-boost-top">NEXT SHOT</span><i>${CLOVER}</i><span class="bf-boost-luck">100x LUCK</span><span class="bf-boost-price"></span></button>
     <div class="bf-part bf-aim">
+      <div class="bf-target"><button type="button" class="bf-arrow tprev" aria-label="Previous target zone">&#9664;</button><span class="bf-target-name"></span><button type="button" class="bf-arrow tnext" aria-label="Next target zone">&#9654;</button></div>
       <div class="bf-bait"><button type="button" class="bf-arrow prev" aria-label="Previous bait">&#9664;</button><span class="bf-bait-name"></span><button type="button" class="bf-arrow next" aria-label="Next bait">&#9654;</button></div>
       <button type="button" class="bf-go">Bait</button>
       <button type="button" class="bf-cancel">Cancel</button>
@@ -101,6 +109,8 @@ export function createBaitFlow({ scene, harpoon, game, fx }) {
     boost: $('.bf-boost'),
     boostPrice: $('.bf-boost-price'),
     baitName: $('.bf-bait-name'),
+    target: $('.bf-target'),
+    targetName: $('.bf-target-name'),
     rating: $('.bf-rating'),
     dist: $('.bf-dist-text b'),
     fill: $('.bf-track-fill'),
@@ -135,20 +145,50 @@ export function createBaitFlow({ scene, harpoon, game, fx }) {
   }
 
   // --- World pieces ----------------------------------------------------------------------------
-  // The luck bush: a cluster of studded leaf blocks with its own (cloned) material so it can glow.
-  const bush = new Group()
-  bush.visible = false
-  const bushMat = mat.studs('#46c24e').clone()
-  bushMat.transparent = true
-  const bushBase = bushMat.color.clone()
-  for (const [w, h, d, x, y, z] of [
-    [2.6, 1.4, 2.2, 0, 0.7, 0],
-    [1.8, 1.0, 1.8, 0.7, 1.75, -0.2],
-    [1.6, 1.0, 1.6, -1.1, 0.5, 0.6],
-    [1.2, 0.8, 1.3, 1.4, 0.4, 0.8],
-  ])
-    cube(bush, w, h, d, x, y, z, bushMat)
-  scene.add(bush)
+  // The hiding spot the spear lands at (a plant / rock of the zone, zones.js). While it charges
+  // its meshes wear cloned materials that glow; they get their own materials back afterwards.
+  let hide = null // { spot, mats: [{ mesh, orig, m, base, e, ei }] }
+  const hidePos = new Vector3()
+  function glowOn(spot) {
+    glowOff()
+    const mats = []
+    spot.group.traverse((o) => {
+      if (!o.isMesh) return
+      const m = o.material.clone()
+      m.transparent = true
+      mats.push({ mesh: o, orig: o.material, m, base: m.color.clone(), e: m.emissive.clone(), ei: m.emissiveIntensity })
+      o.material = m
+    })
+    hide = { spot, mats }
+  }
+  // e: 0..1 glow (colour -> white hot, translucent at the peak).
+  function glowSet(e) {
+    if (!hide) return
+    for (const x of hide.mats) {
+      x.m.color.copy(x.base).lerp(WHITE, e)
+      x.m.emissive.copy(x.e).lerp(GLOW, Math.min(1, e * 1.3))
+      x.m.emissiveIntensity = lerp(x.ei, 2, e)
+      x.m.opacity = 1 - e * 0.25
+    }
+  }
+  function glowOff() {
+    if (!hide) return
+    for (const x of hide.mats) {
+      x.mesh.material = x.orig
+      x.m.dispose()
+    }
+    const g = hide.spot.group
+    g.position.set(hide.spot.x, 0, hide.spot.z)
+    g.scale.set(1, 1, 1)
+    hide = null
+  }
+  // Shake (something inside) and squash (it bursts out): amp m, squash = y scale - 1.
+  function hideMove(amp, squash = 0) {
+    if (!F.spot) return
+    const g = F.spot.group
+    g.position.set(F.spot.x + Math.sin(F.t * 47) * amp, 0, F.spot.z + Math.cos(F.t * 39) * amp)
+    g.scale.set(1 - squash * 0.4, 1 + squash, 1 - squash * 0.4)
+  }
   const groundGlow = new Mesh(new PlaneGeometry(1, 1), new MeshBasicMaterial({ map: glowTex(), color: '#d6ff5a', transparent: true, opacity: 0, blending: AdditiveBlending, depthWrite: false, toneMapped: false }))
   groundGlow.rotation.x = -Math.PI / 2
   groundGlow.visible = false
@@ -164,7 +204,9 @@ export function createBaitFlow({ scene, harpoon, game, fx }) {
   }
   // One point light reused for the spear glow, the bush and the catch flash (always in
   // the scene so the light count never changes: no shader recompiles mid-shot).
-  const light = new PointLight('#d8ff7a', 0, 16, 1.6)
+  // Kept 1.5+ m clear of every surface and under ~25: a point light right on a shiny surface
+  // overflows the half-float HDR target and the bloom smears the Inf/NaN over the screen.
+  const light = new PointLight('#d8ff7a', 0, 16, 2)
   scene.add(light)
 
   // --- State -----------------------------------------------------------------------------------
@@ -211,6 +253,10 @@ export function createBaitFlow({ scene, harpoon, game, fx }) {
   const right = new Vector3(-fwd.z, 0, fwd.x)
   const land = new Vector3()
   const bushAt = new Vector3()
+  const baitAt = new Vector3() // the bait on the ground
+  const outAt = new Vector3() // where the catch lands when it jumps out of the spot
+  const focus = new Vector3()
+  const dirB = new Vector3() // spot -> bait
   const start = new Vector3()
   const deliver = new Vector3()
   const toH = new Vector3()
@@ -227,7 +273,7 @@ export function createBaitFlow({ scene, harpoon, game, fx }) {
   const tmp = new Vector3()
   const chasePos = new Vector3()
   const chaseQ = new Object3D().quaternion
-  const looker = new Object3D()
+  const looker = new PerspectiveCamera() // a camera, so lookAt points its -Z (the view) at the target
 
   function setPhase(p) {
     F.phase = p
@@ -243,7 +289,26 @@ export function createBaitFlow({ scene, harpoon, game, fx }) {
     el.baitName.textContent = `${baitName(p)} ${i + 1}/${S.baits.length}`
     el.baitName.style.color = BAITS.kinds[kindOf(p)].color
     harpoon.arm(kindOf(p))
+    sendFx('arm', { k: kindOf(p) })
     F.selected = S.selected
+  }
+  // Target picker: -1 = Max Reach (the power sets the distance as usual); a zone below the
+  // farthest one the harpoon reaches (game.aimZones) = the spear always lands in it, the power
+  // only sets where in it (and so the luck). Kept for the session.
+  let target = -1
+  function paintTarget() {
+    const n = game.aimZones()
+    if (target >= n) target = -1
+    el.target.classList.toggle('off', n === 0)
+    const z = ZONES[target]
+    el.targetName.textContent = target < 0 ? 'Target: Max Reach' : `Target: ${z.icon} ${z.name}`
+    el.targetName.style.color = target < 0 ? '' : z.accent
+  }
+  function cycleTarget(dir) {
+    const n = game.aimZones()
+    if (!n) return
+    target = ((target + 1 + dir + n + 1) % (n + 1)) - 1
+    paintTarget()
   }
   function paintBoost() {
     const ready = game.nextShotReady
@@ -272,6 +337,7 @@ export function createBaitFlow({ scene, harpoon, game, fx }) {
     camPos.set(0, 0, 0)
     F.camInit = false
     paintBait()
+    paintTarget()
     paintBoost()
     show('aim', 'meter', 'boost')
     document.body.classList.add('bf-on')
@@ -283,6 +349,7 @@ export function createBaitFlow({ scene, harpoon, game, fx }) {
   function cancel() {
     if (F.phase !== 'aim') return
     harpoon.disarm()
+    sendFx('disarm')
     snd.unmount()
     finish()
   }
@@ -299,15 +366,41 @@ export function createBaitFlow({ scene, harpoon, game, fx }) {
     const R = HARPOON.reach
     const maxD = game.maxDistance()
     let d = maxD * (R.minPower + (1 - R.minPower) * k) + (Math.random() * 2 - 1) * HARPOON.jitter
+    if (target >= 0 && target < game.aimZones()) {
+      const a = zoneStart(target)
+      const b = zoneStart(target + 1)
+      d = a + 6 + (b - a - 12) * k
+    }
     d = Math.max(18, Math.min(laneLength() - 8, d))
+    // Never right on a zone gate: land clearly inside one zone.
+    const zs = zoneStart(zoneAt(d))
+    if (zs > 0 && d - zs < 6) d = zs + 6
     F.dist = d
     F.zone = zoneAt(d)
     const inCanyon = d < H.z - LANE.canyonEnd - 2
     const spread = inCanyon ? HARPOON.spread.canyon : HARPOON.spread.wild
     land.copy(H).addScaledVector(fwd, d).addScaledVector(right, (Math.random() * 2 - 1) * spread).setY(0)
+    // Land on open ground a few metres from the nearest hiding spot (roughly its harpoon side):
+    // whatever hides in it will come out for the bait.
+    F.spot = zones?.nearestSpot(land.x, land.z, F.zone) ?? null
+    if (F.spot) {
+      hidePos.set(F.spot.x, 0, F.spot.z)
+      tmp.copy(H).sub(hidePos).setY(0).normalize()
+      const a = (Math.random() * 2 - 1) * 0.8
+      const ca = Math.cos(a)
+      const sa = Math.sin(a)
+      tmp.set(tmp.x * ca - tmp.z * sa, 0, tmp.x * sa + tmp.z * ca)
+      land.copy(hidePos).addScaledVector(tmp, HARPOON.approach.gap)
+      const lim = land.z > LANE.canyonEnd - 2 ? LANE.canyonHalf - 2.5 : LANE.wildHalf - 4
+      land.x = Math.max(-lim, Math.min(lim, land.x))
+      F.zone = F.spot.zone
+      F.dist = Math.hypot(land.x - H.x, land.z - H.z)
+      d = F.dist
+    }
     const flight = Math.min(HARPOON.flight[1] * 2, lerp(HARPOON.flight[0], HARPOON.flight[1], Math.min(1, d / 140)) + Math.max(0, d - 140) / 170)
     const arc = Math.min(30, lerp(HARPOON.arc[0], HARPOON.arc[1], Math.min(1, d / 140)) + Math.max(0, d - 140) * 0.02)
     harpoon.fire(land, flight, arc, { onFire, onFlight, onLand })
+    sendFx('fire', { x: Math.round(land.x * 100) / 100, z: Math.round(land.z * 100) / 100, f: Math.round(flight * 100) / 100, a: Math.round(arc * 10) / 10 })
     const R2 = RATINGS[F.rating]
     el.rating.textContent = R2.text
     el.rating.className = `bf-rating ${R2.cls}`
@@ -336,9 +429,9 @@ export function createBaitFlow({ scene, harpoon, game, fx }) {
     spearPrev.copy(pos)
     F.traveled = Math.hypot(pos.x - H.x, pos.z - H.z)
     F.wind?.set(Math.min(1, Math.sin(Math.min(1, k) * Math.PI) * 0.6 + 0.4))
-    light.position.copy(pos)
+    light.position.copy(pos).y += 1.8
     light.color.set('#eaffb0')
-    light.intensity = 30
+    light.intensity = 10
     light.distance = 14
   }
   function onLand(pos) {
@@ -349,29 +442,29 @@ export function createBaitFlow({ scene, harpoon, game, fx }) {
     fx.dust(tmp.copy(pos).setY(0), '#c8a070', 28, 4, 2.2)
     fx.ring(tmp, '#fff3c0', 6)
     F.shake = 0.5
-    // The bush springs up just beyond where the spear stuck.
-    const flat = tmp.set(spearDir.x, 0, spearDir.z).normalize()
-    bushAt.copy(pos).setY(0).addScaledVector(flat, 1.9)
-    bush.position.copy(bushAt)
-    bush.rotation.y = Math.atan2(flat.x, flat.z)
-    bush.scale.setScalar(0.01)
-    bush.visible = true
-    bushMat.color.copy(bushBase)
-    bushMat.emissive.set('#000000')
-    bushMat.opacity = 1
+    // The hiding spot just beyond where the spear stuck.
+    if (F.spot) bushAt.set(F.spot.x, 0, F.spot.z)
+    else bushAt.copy(pos).setY(0).addScaledVector(tmp.set(spearDir.x, 0, spearDir.z).normalize(), 1.9)
+    if (F.spot) fx.confetti(tmp.copy(bushAt).setY(1.2), [F.spot.color, '#ffffff'], 10, 3)
     groundGlow.position.copy(bushAt).setY(0.08)
     groundGlow.visible = true
     groundGlow.material.opacity = 0
-    toH.copy(H).sub(bushAt).setY(0).normalize()
-    light.position.copy(bushAt).setY(2.5)
+    if (!harpoon.baitPos(baitAt)) baitAt.copy(pos).setY(0)
+    toH.copy(H).sub(baitAt).setY(0).normalize()
+    dirB.copy(baitAt).sub(bushAt).setY(0)
+    if (dirB.lengthSq() < 0.01) dirB.copy(toH)
+    dirB.normalize()
+    light.position.copy(bushAt).setY(4.2)
     light.color.set('#c8ff6a')
     light.intensity = 0
+    show('mult')
     restart(el.mult, 'fade')
     F.flightLuck = F.powerLuck * (1 + F.dist / HARPOON.distLuck) * F.boost
     setPhase('land')
   }
 
   function startCharge() {
+    if (F.spot) glowOn(F.spot)
     F.bushMult = rollBush()
     F.finalLuck = F.flightLuck * F.bushMult
     F.shownLuck = F.flightLuck
@@ -383,7 +476,7 @@ export function createBaitFlow({ scene, harpoon, game, fx }) {
     setPhase('charge')
   }
 
-  function hook() {
+  function emerge() {
     F.riser?.stop(0.15)
     F.riser = null
     snd.luckBurst(Math.min(1, Math.log10(F.finalLuck) / 2))
@@ -406,19 +499,26 @@ export function createBaitFlow({ scene, harpoon, game, fx }) {
     })
     rig.root.position.copy(bushAt)
     rig.root.scale.setScalar(0.01)
-    rig.root.rotation.y = Math.atan2(toH.x, toH.z)
+    // It bursts out of the spot: leaves / dust fly, the spot squashes.
+    if (F.spot) {
+      fx.confetti(tmp.copy(bushAt).setY(1.4), [F.spot.color, '#ffffff', F.spot.color], 34, 6)
+      fx.splash(tmp.copy(bushAt).setY(1), F.spot.color, 18)
+    }
+    snd.rustle(1.4)
+    rig.root.rotation.y = Math.atan2(dirB.x, dirB.z)
     scene.add(rig.root)
     F.rig = rig
-    start.copy(bushAt).addScaledVector(toH, 2.8)
+    // Out of the spot, then a run to the bait: it stops with its mouth at the bait.
+    outAt.copy(bushAt).addScaledVector(dirB, 1.6)
+    start.copy(baitAt).addScaledVector(dirB, -(0.35 + rig.height * 0.28))
+    F.runT = Math.max(0.35, Math.min(1.6, outAt.distanceTo(start) / HARPOON.approach.run))
     harpoon.deliveryPoint(deliver)
     const oneIn = game.oneIn(data.species, F.p)
     el.odds.textContent = `1 in ${oneIn.toLocaleString('en-US')}`
     el.odds.style.setProperty('--c', data.shiny ? '#ffd23a' : rar.color)
     el.hooked.style.setProperty('--c', rar.color)
-    show('luck', 'odds', 'hooked')
-    restart(el.hooked, 'pop')
+    show('odds')
     restart(el.odds, 'pop')
-    snd.hooked(F.r)
     snd.animalCall(def.base ?? data.species, 1, 0)
     fx.sparkle(tmp.copy(bushAt).setY(1.6), rar.color, 30 + F.r * 8, 5)
     fx.dust(tmp.copy(bushAt).setY(0), '#d9f0b0', 24, 4, 1.8)
@@ -435,6 +535,21 @@ export function createBaitFlow({ scene, harpoon, game, fx }) {
     F.lurch = 0
     el.reelImg.src = (data.shiny ? THUMBS.shiny[data.species] : THUMBS.animal[data.species]) ?? ''
     el.reel.classList.remove('done')
+    handAt.x = -1 // the Click hand starts on this catch
+    F.sniffed = false
+    setPhase('emerge')
+  }
+
+  // It bites the bait: crunch, crumbs, the line snaps taut, "HOOKED!".
+  function bite() {
+    const kind = BAITS.kinds[kindOf(F.p)]
+    snd.chomp()
+    fx.splash(tmp.copy(baitAt).setY(0.3), kind.color, 16)
+    fx.dust(tmp.copy(baitAt).setY(0), '#e8dcc0', 10, 2, 0.8)
+    show('odds', 'hooked')
+    restart(el.hooked, 'pop')
+    snd.hooked(F.r)
+    F.shake = 0.45
     setPhase('hooked')
   }
 
@@ -457,7 +572,7 @@ export function createBaitFlow({ scene, harpoon, game, fx }) {
     el.reelWord.textContent = 'Click Fast!'
     el.reelN.textContent = '(0)'
     show('reel')
-    light.position.copy(animalPos).setY(2)
+    light.position.copy(animalPos).setY((F.rig?.height ?? 1.5) + 1.8)
     light.color.set('#ffffff')
     fx.shimmer(tmp.copy(animalPos), '#ffffff', 26, 1.4, 3)
     setPhase('caught')
@@ -480,7 +595,7 @@ export function createBaitFlow({ scene, harpoon, game, fx }) {
   function finish() {
     show()
     document.body.classList.remove('bf-on')
-    bush.visible = false
+    glowOff()
     groundGlow.visible = false
     for (const s of streaks) s.m.visible = false
     F.wind?.stop(0.2)
@@ -501,6 +616,8 @@ export function createBaitFlow({ scene, harpoon, game, fx }) {
   }
   $('.bf-arrow.prev').addEventListener('click', () => cycle(-1))
   $('.bf-arrow.next').addEventListener('click', () => cycle(1))
+  $('.bf-arrow.tprev').addEventListener('click', () => cycleTarget(-1))
+  $('.bf-arrow.tnext').addEventListener('click', () => cycleTarget(1))
   el.boost.addEventListener('click', () => {
     if (game.nextShotReady) return
     if (game.buyNextShot()) {
@@ -518,6 +635,7 @@ export function createBaitFlow({ scene, harpoon, game, fx }) {
       if (F.phase === 'aim') shoot()
       else reelClick()
     } else if ((key === 'Backspace' || key === 'KeyX') && F.phase === 'aim') cancel()
+    else if (key === 'KeyT' && F.phase === 'aim') cycleTarget(e.shiftKey ? -1 : 1)
   })
   // Reeling: a click / tap anywhere on the screen (not on a button) pulls.
   window.addEventListener(
@@ -533,13 +651,20 @@ export function createBaitFlow({ scene, harpoon, game, fx }) {
   // --- Per frame ---------------------------------------------------------------------------------
   const project = new Vector3()
   function placeHand(camera) {
-    project.copy(animalPos).setY(animalPos.y + (F.rig?.height ?? 1.5) * 0.45).addScaledVector(right, 0.9)
-    project.project(camera)
-    const x = (project.x * 0.5 + 0.5) * 100
-    const y = (-project.y * 0.5 + 0.5) * 100
-    el.hand.style.left = `${Math.max(8, Math.min(92, x))}%`
-    el.hand.style.top = `${Math.max(12, Math.min(80, y))}%`
+    // Just below-right of the catch's head (where the spear bites), like a finger tapping it.
+    project.copy(mouth).project(camera)
+    const x = Math.max(8, Math.min(92, (project.x * 0.5 + 0.5) * 100 + 4))
+    const y = Math.max(12, Math.min(80, (-project.y * 0.5 + 0.5) * 100 + 4))
+    // Eased, so camera shake and tugs don't make it jitter; snaps when it first appears.
+    if (handAt.x < 0) handAt.set(x, y)
+    else {
+      handAt.x += (x - handAt.x) * 0.12
+      handAt.y += (y - handAt.y) * 0.12
+    }
+    el.hand.style.left = `${handAt.x.toFixed(2)}%`
+    el.hand.style.top = `${handAt.y.toFixed(2)}%`
   }
+  const handAt = { x: -1, y: -1, set(a, b) { this.x = a; this.y = b } }
 
   function update(dt, t) {
     if (F.phase === 'off') return
@@ -584,7 +709,7 @@ export function createBaitFlow({ scene, harpoon, game, fx }) {
       el.mult.textContent = `x${luckText(m)}`
     } else if (ph === 'land') {
       const k = clamp01(F.t / 0.35)
-      bush.scale.setScalar(k < 0.7 ? (k / 0.7) * 1.12 : 1.12 - ((k - 0.7) / 0.3) * 0.12)
+      hideMove(Math.exp(-F.t * 6) * 0.12) // the spot shudders from the impact
       light.intensity = lerp(light.intensity, 0, Math.min(1, dt * 6))
       if (F.t > 0.75) startCharge()
     } else if (ph === 'charge') {
@@ -599,15 +724,20 @@ export function createBaitFlow({ scene, harpoon, game, fx }) {
         restart(el.luck, 'tick')
       }
       F.riser?.set(k)
-      // Bush: green -> glowing -> white hot; translucent as it peaks.
-      bushMat.color.copy(bushBase).lerp(tmp.set(1, 1, 1), e)
-      bushMat.emissive.setRGB(0.55 * e + 0.15 * k, 0.9 * e + 0.2 * k, 0.35 * e)
-      bushMat.emissiveIntensity = 0.3 + e * 1.8
-      bushMat.opacity = 1 - e * 0.25
-      bush.scale.setScalar(1 + Math.sin(F.t * (8 + k * 30)) * 0.015 * (0.4 + k))
+      // The spot: its colour -> glowing -> white hot. Late in the charge it shakes harder and
+      // harder and rustles: something is in there.
+      glowSet(e)
+      const restless = clamp01((k - 0.45) / 0.55)
+      hideMove(restless * restless * 0.16, Math.sin(F.t * 13) * 0.04 * restless)
+      F.rustleIn = (F.rustleIn ?? 0) - dt
+      if (restless > 0 && F.rustleIn <= 0) {
+        F.rustleIn = lerp(0.7, 0.18, restless)
+        snd.rustle(0.35 + restless * 0.5)
+        if (F.spot) fx.confetti(tmp.copy(bushAt).setY(1.4 + Math.random()), [F.spot.color], 3, 2)
+      }
       groundGlow.material.opacity = 0.25 + e * 0.75
       groundGlow.scale.setScalar(6 + e * 10)
-      light.intensity = 6 + e * 70
+      light.intensity = 3 + e * 22
       light.distance = 14 + e * 10
       el.glow.style.opacity = (e * 0.85).toFixed(3)
       // Rising light streaks, more as it charges.
@@ -625,31 +755,34 @@ export function createBaitFlow({ scene, harpoon, game, fx }) {
         }
       }
       if (Math.random() < dt * (4 + e * 30)) fx.sparkle(tmp.copy(bushAt).add(project.set((Math.random() - 0.5) * 2.4, 1 + Math.random() * 1.5, (Math.random() - 0.5) * 2)), '#f4ffd0', 2, 1.5, 0.35)
-      if (k >= 1) hook()
-    } else if (ph === 'hooked' || ph === 'reel' || ph === 'caught') {
+      if (k >= 1) emerge()
+    } else if (ph === 'emerge' || ph === 'hooked' || ph === 'reel' || ph === 'caught') {
       const rig = F.rig
-      // The bush cools back to green, then sinks away.
-      const cool = clamp01(F.t / 0.4)
-      if (ph === 'hooked') {
-        bushMat.color.copy(bushBase).lerp(tmp.set(1, 1, 1), 1 - cool)
-        bushMat.emissive.setRGB(0.7 * (1 - cool), 1.1 * (1 - cool), 0.35 * (1 - cool))
-        bushMat.opacity = 0.75 + cool * 0.25
+      if (ph === 'emerge') {
+        // The spot cools back to its own colour and bounces after the burst; it stays (scenery).
+        const cool = clamp01(F.t / 0.4)
+        if (hide) {
+          glowSet(1 - cool)
+          const b = clamp01(F.t / 0.6)
+          hideMove(0, Math.sin(b * Math.PI * 3) * 0.22 * (1 - b))
+          if (b >= 1) glowOff()
+        }
         el.glow.style.opacity = ((1 - cool) * 0.85).toFixed(3)
         groundGlow.material.opacity = (1 - cool) * 0.9
-        light.intensity = (1 - cool) * 70
-        const sink = clamp01((F.t - 0.55) / 0.45)
-        bush.scale.setScalar(1 - easeOut(sink))
-        if (sink >= 1) bush.visible = false
-        if (F.t > 0.55 && !F.rustled) {
-          F.rustled = true
-          snd.rustle(0.8)
+        light.intensity = (1 - cool) * 25
+        const sniffAt = 0.45 + F.runT
+        if (F.t >= sniffAt && !F.sniffed) {
+          F.sniffed = true
+          snd.sniff()
         }
+        if (F.t >= sniffAt + HARPOON.approach.sniff) bite()
+      }
+      if (ph === 'hooked') {
         if (F.t > 0.9 && !shown.has('reel')) {
           show('odds', 'hooked', 'hand', 'tip', 'reel')
           el.reelWord.textContent = 'Click Fast!'
         }
         if (F.t >= HARPOON.hook) {
-          F.rustled = false
           show('hand', 'tip', 'reel')
           setPhase('reel')
         }
@@ -677,13 +810,30 @@ export function createBaitFlow({ scene, harpoon, game, fx }) {
       // Where the catch is: popping out of the bush, then dragged up the Lane.
       if (rig) {
         const pop = clamp01(F.t / 0.45)
-        if (F.phase === 'hooked' && pop < 1) {
-          animalPos.lerpVectors(bushAt, start, easeOut(pop))
-          animalPos.y = Math.sin(pop * Math.PI) * 2.2
+        let gait = -1 // emerge: -1 = jumping out, else walk speed (0 = sniffing)
+        if (F.phase === 'emerge' && pop < 1) {
+          animalPos.lerpVectors(bushAt, outAt, easeOut(pop))
+          animalPos.y = Math.sin(pop * Math.PI) * 2.4 + (1 - pop) * 0.6
           rig.root.scale.setScalar(pop < 0.7 ? (pop / 0.7) * 1.15 : 1.15 - ((pop - 0.7) / 0.3) * 0.15)
-        } else if (F.phase === 'hooked') {
-          animalPos.copy(start)
+        } else if (F.phase === 'emerge') {
           rig.root.scale.setScalar(1)
+          const run = clamp01((F.t - 0.45) / F.runT)
+          const e = run * run * (3 - 2 * run)
+          animalPos.lerpVectors(outAt, start, e)
+          animalPos.y = 0
+          gait = run < 1 ? (outAt.distanceTo(start) / F.runT) * 1.4 : 0
+          F.dustIn -= dt
+          if (run < 1 && F.dustIn <= 0) {
+            F.dustIn = 0.16
+            fx.dust(tmp.copy(animalPos).setY(0), '#e8f0c8', 2, 1, 0.6)
+            snd.scuff(0.4)
+          }
+        } else if (F.phase === 'hooked') {
+          rig.root.scale.setScalar(1)
+          // The line snaps taut: yanked a step toward the harpoon, then it digs in.
+          const y = clamp01(F.t / 0.35)
+          animalPos.copy(start).addScaledVector(toH, Math.sin(y * Math.PI) * 0.6)
+          animalPos.y = Math.sin(y * Math.PI) * 0.35
         } else {
           const k = F.phase === 'caught' ? 1 : F.progress
           animalPos.lerpVectors(start, deliver, k)
@@ -698,6 +848,12 @@ export function createBaitFlow({ scene, harpoon, game, fx }) {
           }
         }
         rig.root.position.copy(animalPos)
+        if (F.phase === 'emerge') {
+          // Facing the bait; sniffing = nose dipping toward it.
+          rig.root.rotation.y = Math.atan2(dirB.x, dirB.z)
+          rig.root.rotation.x = gait === 0 ? 0.12 + Math.abs(Math.sin(F.t * 16)) * 0.12 : 0
+          rig.animate(dt, Math.max(0, gait), t, gait < 0 ? 'fly' : 'walk')
+        } else {
         const tugging = F.tugT > 0
         const face = Math.atan2(toH.x, toH.z)
         rig.root.rotation.y = face + Math.sin(F.t * (tugging ? 14 : 6)) * (tugging ? 0.5 : 0.18) + (tugging ? 0.4 : 0)
@@ -707,7 +863,7 @@ export function createBaitFlow({ scene, harpoon, game, fx }) {
         if (rig.head) {
           rig.root.updateMatrixWorld(true)
           rig.head.getWorldPosition(mouth)
-          mouth.addScaledVector(toH, 0.35 * (animalDef(F.data.species).scale ?? 1))
+          mouth.addScaledVector(toH, 0.35 * (rig.scale ?? 1))
         } else mouth.copy(animalPos).setY(rig.height * 0.7)
         harpoon.hold(mouth, F.phase === 'reel' ? 0.12 + (tugging ? 0 : 0.15) : 0.4, F.phase === 'reel' ? 0.35 + (tugging ? 0.65 : 0) + F.lurch * 0.4 : 0.2)
         // Caught: glows white, swells a little.
@@ -719,9 +875,10 @@ export function createBaitFlow({ scene, harpoon, game, fx }) {
             m.emissiveIntensity = k * 2.2
           }
           rig.root.scale.setScalar(1 + Math.sin(k * Math.PI) * 0.18)
-          light.intensity = k * 40
+          light.intensity = k * 18
           if (F.t >= HARPOON.caught) deliverCatch()
         }
+        } // not emerging
       }
     } else if (ph === 'outro') {
       if (F.camW <= 0.001 && F.mount <= 0) {
@@ -762,17 +919,26 @@ export function createBaitFlow({ scene, harpoon, game, fx }) {
       rate = F.t < 0.4 ? 6 : 16
       fov = CAMERA.fov + 10
     } else if (ph === 'land' || ph === 'charge') {
+      // The glowing spot with the bait in front of it.
       const k = ph === 'charge' ? clamp01(F.t / F.chargeTime) : 0
-      wantPos.copy(bushAt).addScaledVector(toH, 9 - k * 2.2).addScaledVector(right, 1.2).setY(4 - k * 0.6)
-      wantLook.copy(bushAt).setY(1.4)
+      focus.lerpVectors(bushAt, baitAt, 0.4)
+      wantPos.copy(focus).addScaledVector(toH, 10 - k * 2.2).addScaledVector(right, 1.6).setY(4.4 - k * 0.6)
+      wantLook.copy(focus).setY(1.2)
       rate = ph === 'land' ? 3 : 2.5
       fov = CAMERA.fov - k * 6
+    } else if (ph === 'emerge') {
+      // Follow the catch from the spot to the bait, both in frame.
+      const h = F.rig?.height ?? 1.5
+      focus.lerpVectors(animalPos, baitAt, 0.5).setY(0)
+      wantPos.copy(focus).addScaledVector(toH, 7 + h * 1.2).addScaledVector(right, 1.8 + h * 0.4).setY(3 + h * 0.6)
+      wantLook.copy(focus).setY(h * 0.45)
+      rate = 4
     } else if (ph === 'hooked' || ph === 'reel' || ph === 'caught' || ph === 'outro') {
       const h = F.rig?.height ?? 1.5
       const back = 5.5 + h * 1.2
       wantPos.copy(animalPos).setY(0).addScaledVector(toH, back).addScaledVector(right, 2 + h * 0.4).setY(2.2 + h * 0.8)
       wantLook.copy(animalPos).setY(h * 0.55)
-      rate = ph === 'reel' ? 7 : 4
+      rate = ph === 'reel' ? 22 : 5 // the catch moves fast while reeled: follow tightly
     }
     if (!F.camInit) {
       // Start the flow's view where the chase camera is, so the first move is a smooth glide.
@@ -802,7 +968,10 @@ export function createBaitFlow({ scene, harpoon, game, fx }) {
     }
     // Streaks face the camera (cylindrical billboards).
     for (const s of streaks) if (s.m.visible) s.m.rotation.y = Math.atan2(camera.position.x - s.m.position.x, camera.position.z - s.m.position.z)
-    if (shown.has('hand')) placeHand(camera)
+    if (shown.has('hand')) {
+      camera.updateMatrixWorld() // project with this frame's view, not the last render's
+      placeHand(camera)
+    }
   }
 
   // Places the avatar on the harpoon while mounted (with a little hop on and off).
@@ -828,6 +997,12 @@ export function createBaitFlow({ scene, harpoon, game, fx }) {
     },
     get phase() {
       return F.phase
+    },
+    // The catch on the line, for the other players (net.js): its species, whether it is shiny
+    // and where it stands (it bursts out, walks to the bait, gets reeled in), or null.
+    hookState() {
+      if (!F.rig || !F.data) return null
+      return { s: F.data.species, h: F.data.shiny ? 1 : 0, x: animalPos.x, y: animalPos.y, z: animalPos.z }
     },
   }
   game.flow = flow

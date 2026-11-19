@@ -1,5 +1,7 @@
 import './hud.css'
-import { BAITS, PASSES, PETS, PLAY_BOOST, STORE } from './config.js'
+import { adsAvailable, showRewarded } from './bloxity.js'
+import { requestAdReward } from './net.js'
+import { AD_REWARD, BAITS, PASSES, PETS, PLAY_BOOST, STORE } from './config.js'
 import { ICONS } from './icons.js'
 import { THUMBS } from './thumbs.js'
 import { clock, minsSecs, money, num } from './format.js'
@@ -33,6 +35,7 @@ export function createHud(game, open) {
     <div class="hud-right">
       <button type="button" class="hud-pass cash" data-pass="x2cash"><span class="pass-top">PERMANENT</span><span class="pass-name">x2 Cash</span><span class="pass-price"></span></button>
       <button type="button" class="hud-pass xp" data-pass="x2xp"><span class="pass-top">PERMANENT</span><span class="pass-name">x2 XP</span><span class="pass-price"></span></button>
+      <button type="button" class="hud-pass ad" hidden><span class="pass-top">WATCH AD</span><span class="pass-name">x2 Cash</span><span class="pass-price"></span></button>
     </div>
     <button type="button" class="hud-sound" aria-label="Sound"></button>
     <div class="hud-bottom-left">
@@ -59,6 +62,30 @@ export function createHud(game, open) {
       else replay(b, 'shake')
     })
   }
+  // Rewarded ad (Boxity only, while it can serve one): 2x Cash for AD_REWARD.minutes. The game server
+  // checks the ad's token before it is granted; with no server to ask, Boxity's 'completed' is it.
+  const adCard = $('.hud-pass.ad')
+  let adBusy = false
+  adCard.addEventListener('click', async () => {
+    if (adBusy) return
+    adBusy = true
+    adCard.classList.add('busy')
+    try {
+      const r = await showRewarded(AD_REWARD.placement)
+      if (r.status !== 'completed') {
+        toast(r.status === 'denied' || r.status === 'no-fill' ? 'No ad right now, try again later!' : 'Ad not finished: no reward this time.', false)
+        return
+      }
+      const checked = await requestAdReward(r.rewardToken ?? '')
+      if (checked && !checked.ok) return toast('That ad could not be checked. Try again later!', false)
+      game.grantPotion(AD_REWARD.potion, checked?.minutes ?? AD_REWARD.minutes)
+      toast(`2x Cash for ${AD_REWARD.minutes} minutes!`, true)
+      burst(...centre(adCard), 'stars')
+    } finally {
+      adBusy = false
+      adCard.classList.remove('busy')
+    }
+  })
   $('.hud-cancel').addEventListener('click', () => game.training?.cancel())
   const free = $('.hud-free')
   free.querySelector('img').src = THUMBS.pet.dino ?? ''
@@ -198,6 +225,9 @@ export function createHud(game, open) {
         el.classList.toggle('poor', !owned && game.money < PASSES[id].price)
         set(`pass-${id}`, el.querySelector('.pass-price'), owned ? 'OWNED' : money(PASSES[id].price))
       }
+      // The ad card: only where Boxity can serve an ad.
+      adCard.hidden = !adsAvailable()
+      set('pass-ad', adCard.querySelector('.pass-price'), adBusy ? '...' : `FREE ${AD_REWARD.minutes} MIN`)
       // Offers.
       free.hidden = S.freeClaimed
       const mammoth = PETS.list.find((p) => p.id === 'mammoth')

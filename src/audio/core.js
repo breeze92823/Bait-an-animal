@@ -42,7 +42,8 @@ try {
 } catch {
   // Storage blocked: unmuted.
 }
-const level = () => (muted ? 0 : volume * volume) // perceptual: the slider feels even
+let adMuted = false // Boxity ad break: silent until it ends (separate from the player's own mute)
+const level = () => (muted || adMuted ? 0 : volume * volume) // perceptual: the slider feels even
 function applyLevel(t = 0.05) {
   if (A.master) A.master.gain.setTargetAtTime(level(), A.ctx.currentTime, t)
 }
@@ -61,6 +62,10 @@ export function setMuted(on) {
   applyLevel()
 }
 export const toggleMuted = () => setMuted(!muted)
+export function setAdMuted(on) {
+  adMuted = !!on
+  applyLevel()
+}
 
 // --- Noise -------------------------------------------------------------------------
 function makeNoise(ctx, seconds, kind, channels = 1) {

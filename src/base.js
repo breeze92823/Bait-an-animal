@@ -1,9 +1,9 @@
 import { AdditiveBlending, CanvasTexture, CylinderGeometry, Group, Mesh, MeshBasicMaterial, MeshStandardMaterial, RingGeometry, SRGBColorSpace, TorusGeometry, Vector3 } from 'three'
-import { BAITS, BASE, INTERACT } from './config.js'
+import { BAITS, BASE, INTERACT, penSouth } from './config.js'
 import { box, cube, mat } from './voxel.js'
-import { neon, solidBox } from './propkit.js'
+import { colliderShift, neon, solidBox, withColliderShift } from './propkit.js'
 import { world } from './physics.js'
-import { bakeInPlace, compact } from './bake.js'
+import { bake, bakeInPlace, compact } from './bake.js'
 import { bar, billboard, FONT, outlined, panel, pill, roundRect } from './billboard.js'
 import { paintStripes, paintXBoard } from './paint.js'
 import { buildBait } from './bait.js'
@@ -56,35 +56,103 @@ function fenceRun(root, ax, az, bx, bz, H) {
     for (const s of [-1, 1]) box(run, diag, 0.1, 0.06, cx, H * 0.59, 0.06 * s, mat.wood(WOOD.brace), { rz: tilt * s })
   }
   root.add(run)
-  solidBox(len / 2, H / 2 + 0.3, 0.2, (ax + bx) / 2, H / 2 + 0.3, (az + bz) / 2, yaw)
+  return solidBox(len / 2, H / 2 + 0.3, 0.2, (ax + bx) / 2, H / 2 + 0.3, (az + bz) / 2, yaw)
 }
 
-function buildPen(root) {
+// The pen: fence, gate posts, hay bales (south-east corner) and water trough (north-east).
+// Its south fence moves with the Expand Pen level (penSouth), so the fence is its own group,
+// rebuilt and re-baked on each level, with its colliders swapped. The player's plot gets the
+// Expand Pen sign standing outside the south fence (facing the field / spawn); copies built
+// without boards have no sign.
+function buildPen(root, noBoard) {
   const { x: cx, z: cz, half: h, gate, fenceHeight: H } = BASE.pen
   const W = cx - h
   const E = cx + h
   const N = cz - h
-  const S = cz + h
-  // The gate is on the north side, facing the machine pad.
-  fenceRun(root, W, N, gate.x - gate.half, N, H)
-  fenceRun(root, gate.x + gate.half, N, E, N, H)
-  fenceRun(root, E, N, E, S, H)
-  fenceRun(root, E, S, W, S, H)
-  fenceRun(root, W, S, W, N, H)
-  // Gate posts: taller, capped.
-  for (const x of [gate.x - gate.half, gate.x + gate.half]) {
-    box(root, 0.6, H + 1, 0.6, x, (H + 1) / 2, N, mat.wood(WOOD.post))
-    box(root, 0.8, 0.22, 0.8, x, H + 1.1, N, mat.wood(WOOD.rail))
+  const holder = new Group()
+  holder.userData.dynamic = true // baked here, not by the base's bakeInPlace
+  root.add(holder)
+  const shiftX = colliderShift.x // the plot this pen was built on (0 = the player's)
+  let baked = null
+  let colliders = []
+  let level = -1
+
+  const signHolder = new Group()
+  signHolder.userData.dynamic = true
+  root.add(signHolder)
+  const board = noBoard ? null : sign(signHolder, { x: gate.x, z: penSouth(0) + 0.9, yaw: 0 }, { title: 'Expand Pen', lines: ['More room south'], button: { text: '$50K', style: 'poor' } })
+  const spot = { x: 0, y: 1.2, z: 0 }
+
+  const build = (S) => {
+    const raw = new Group()
+    const prevShift = colliderShift.x
+    colliderShift.x = shiftX
+    try {
+      // The gate is on the north side, facing the machine pad.
+      colliders.push(fenceRun(raw, W, N, gate.x - gate.half, N, H))
+      colliders.push(fenceRun(raw, gate.x + gate.half, N, E, N, H))
+      colliders.push(fenceRun(raw, E, N, E, S, H))
+      colliders.push(fenceRun(raw, E, S, W, S, H))
+      colliders.push(fenceRun(raw, W, S, W, N, H))
+    } finally {
+      colliderShift.x = prevShift
+    }
+    // Gate posts: taller, capped.
+    for (const x of [gate.x - gate.half, gate.x + gate.half]) {
+      box(raw, 0.6, H + 1, 0.6, x, (H + 1) / 2, N, mat.wood(WOOD.post))
+      box(raw, 0.8, 0.22, 0.8, x, H + 1.1, N, mat.wood(WOOD.rail))
+    }
+    // A hay bale and a water trough in the back corners (decoration; animals avoid the corners).
+    const hay = mat.studs('#f2cf5a')
+    box(raw, 1.6, 1, 1.1, E - 1.2, 0.5, S - 0.95, hay)
+    box(raw, 1.1, 0.8, 1.6, E - 2.8, 0.4, S - 1.1, hay)
+    const trough = new Group()
+    trough.position.set(E - 1.1, 0, N + 2.6)
+    box(trough, 1.1, 0.7, 2.6, 0, 0.35, 0, mat.wood(WOOD.brace))
+    box(trough, 0.85, 0.05, 2.35, 0, 0.66, 0, mat.lit('#46b8ff', 0.25), { shadow: false })
+    raw.add(trough)
+    raw.updateMatrixWorld(true)
+    baked = bake(raw, true) // root-local, like the rest of the base
+    baked.traverse((o) => {
+      if (o.isMesh) {
+        o.castShadow = !o.material.transparent
+        o.receiveShadow = true
+      }
+    })
+    holder.add(baked)
   }
-  // A hay bale and a water trough in the back corners (decoration; animals avoid the corners).
-  const hay = mat.studs('#f2cf5a')
-  box(root, 1.6, 1, 1.1, E - 1.2, 0.5, S - 0.95, hay)
-  box(root, 1.1, 0.8, 1.6, E - 2.8, 0.4, S - 1.1, hay)
-  const trough = new Group()
-  trough.position.set(E - 1.1, 0, N + 2.6)
-  box(trough, 1.1, 0.7, 2.6, 0, 0.35, 0, mat.wood(WOOD.brace))
-  box(trough, 0.85, 0.05, 2.35, 0, 0.66, 0, mat.lit('#46b8ff', 0.25), { shadow: false })
-  root.add(trough)
+
+  return {
+    board,
+    spot,
+    get level() {
+      return level
+    },
+    get south() {
+      return penSouth(Math.max(0, level))
+    },
+    // Rebuilds the fence at Expand Pen level n (no-op if unchanged). Returns true if it moved.
+    setLevel(n) {
+      if (n === level) return false
+      level = n
+      if (baked) {
+        holder.remove(baked)
+        baked.traverse((o) => o.isMesh && o.geometry.dispose())
+        baked = null
+      }
+      for (const c of colliders) world.removeCollider(c, false)
+      colliders = []
+      const S = penSouth(n)
+      build(S)
+      if (board) {
+        board.group.position.z = S + 0.9
+        if (board.collider) world.removeCollider(board.collider, false)
+        board.collider = solidBox(1.95, 1.9, 0.3, board.group.position.x, 1.9, S + 0.9, 0)
+        Object.assign(spot, worldSpot(board.group, 0, 1.9, 1.2))
+      }
+      return true
+    },
+  }
 }
 
 // --- Machine pad -------------------------------------------------------------------------
@@ -216,7 +284,8 @@ function baitTank(root, emitters, opts) {
       seed,
     }),
   )
-  const addCollider = () => solidBox(1.95 * size, 3.2 * size, 1.95 * size, x, 3.2 * size, z, yaw)
+  const plotX = colliderShift.x // colliders added later (the Auto Machine bought) land on this plot
+  const addCollider = () => withColliderShift(plotX, () => solidBox(1.95 * size, 3.2 * size, 1.95 * size, x, 3.2 * size, z, yaw))
   if (collide) addCollider()
 
   // Label: bait name + XP bar.
@@ -459,16 +528,17 @@ function sellStall(root, scene, npcs) {
   // The shopkeeper behind the counter (same rig as the player, idle-animated).
   loadBaseCharacter().then((npc) => {
     const at = worldSpot(g, 0, -0.35)
-    npc.position.set(at.x, 0, at.z)
+    npc.position.set(at.x, 0, at.z) // root-local (root may be a copy at another plot)
     npc.rotation.y = def.yaw
-    scene.add(npc)
+    root.add(npc)
     npcs.push({ npc, animator: makeAnimator(npc) })
   })
   return { spot: worldSpot(g, 0, 3.1, 1.6) }
 }
 
 // --- Name sign -----------------------------------------------------------------------------
-function nameSign(root) {
+function nameSign(root, vacantAtStart = false) {
+  let vacant = vacantAtStart
   const def = BASE.nameSign
   const g = new Group()
   g.position.set(def.x, 0, def.z)
@@ -506,15 +576,23 @@ function nameSign(root) {
     }
     ctx.restore()
     const name = state.name.length > 12 ? `${state.name.slice(0, 11)}…` : state.name
-    outlined(ctx, `${name}'s`, 330, 98, { px: 48, width: 11, fill: '#ffe46a' })
+    outlined(ctx, vacant ? 'Empty' : `${name}'s`, 330, 98, { px: 48, width: 11, fill: vacant ? '#c9d2e0' : '#ffe46a' })
     outlined(ctx, 'Base', 330, 162, { px: 56, width: 12 })
   })
   face.position.set(0, 2.0, 0.075)
   face.userData.dynamic = true
   g.add(face)
   return {
+    // A plot with nobody on it reads "Empty Base"; setName() puts an owner on it.
+    setVacant() {
+      vacant = true
+      state.img = null
+      face.redraw()
+    },
     setName(name, pfpUrl) {
+      vacant = false
       state.name = name || 'Your'
+      state.img = null
       face.redraw()
       if (!pfpUrl) return
       const img = new Image()
@@ -537,7 +615,9 @@ function nameSign(root) {
 // Three motor tanks that grow bait by themselves, a pipe manifold along their backs, floor
 // wiring to a control console facing the aisle (its screen shows each tank's fill), and
 // warning stripes on the pad. Until it is bought the pad shows a flickering hologram of it.
-function autoMachine(root, emitters) {
+// boards: false = no buy board (another player's plot shows only the machine itself).
+function autoMachine(root, emitters, boards = true) {
+  const plotX = colliderShift.x
   const D = BASE.autoMachine
   const P = BASE.autoPad
   const built = new Group() // shown once owned
@@ -635,9 +715,10 @@ function autoMachine(root, emitters) {
   const forSale = new Group()
   forSale.userData.dynamic = true
   root.add(forSale)
+  forSale.visible = boards
   const F = D.forSale
-  const board = sign(forSale, { x: F.x, z: F.z, yaw: F.yaw }, { title: 'Auto Machine', lines: ['3 tanks grow bait'], button: { text: '$9,600', style: 'poor' } })
-  board.group.position.y = T
+  const board = boards ? sign(forSale, { x: F.x, z: F.z, yaw: F.yaw }, { title: 'Auto Machine', lines: ['3 tanks grow bait'], button: { text: '$9,600', style: 'poor' } }) : { spot: { x: F.x, y: 1.2, z: F.z }, collider: null, set() {} }
+  if (boards) board.group.position.y = T
   // A little banner over the board: "NEW MACHINE".
   const banner = billboard(420, 110, 1, (ctx, w) => {
     roundRect(ctx, 8, 10, w - 16, 90, 30)
@@ -675,15 +756,19 @@ function autoMachine(root, emitters) {
       if (on === owned) return
       owned = on
       built.visible = on
-      forSale.visible = !on
+      forSale.visible = !on && boards
       if (on && board.collider) {
         world.removeCollider(board.collider, false)
         board.collider = null
       }
       if (on && !colliders) {
-        colliders = true
-        for (const t of tanks) t.addCollider()
-        solidBox(0.5, 0.55, 1.45, C.x, 0.55, C.z)
+        colliders = tanks.map((t) => t.addCollider())
+        colliders.push(withColliderShift(plotX, () => solidBox(0.5, 0.55, 1.45, C.x, 0.55, C.z)))
+      }
+      // Off again (another player's plot changing hands): the machine's colliders go too.
+      if (!on && colliders) {
+        for (const c of colliders) world.removeCollider(c, false)
+        colliders = false
       }
       if (on && animate) popT = 0
     },
@@ -776,7 +861,9 @@ function offlinePile(root) {
 // on it belong to training.js), a floating "+1 Strength" label, and the blue upgrade pad
 // with its "Level 1 > Level 2 / $price" billboard. Until bought, only the mat, a dim ring
 // and a wooden buy board standing in it show.
-function gymRing(root) {
+// boards: false = no buy board and no upgrade pad (another player's plot: the ring alone).
+function gymRing(root, boards = true) {
+  const plotX = colliderShift.x
   const G = BASE.gym
   const g = new Group()
   g.userData.dynamic = true
@@ -839,14 +926,15 @@ function gymRing(root) {
   const buy = new Group()
   buy.userData.dynamic = true
   root.add(buy)
-  const board = sign(buy, { x: G.x, z: G.z, yaw: G.facing }, { title: 'Training', lines: ['Catch 1 animal'], button: { text: 'LOCKED', style: 'poor' } })
+  const board = boards ? sign(buy, { x: G.x, z: G.z, yaw: G.facing }, { title: 'Training', lines: ['Catch 1 animal'], button: { text: 'LOCKED', style: 'poor' } }) : { spot: { x: G.x, y: 1.2, z: G.z }, collider: null, set() {} }
 
   let owned = false
   let popT = 1
   const dimMat = mat.plain('#6a3f86', 0.6) // the ring before it is bought: unlit purple
   const show = (on) => {
-    sprite.visible = pad.visible = padSprite.visible = on
-    buy.visible = !on
+    sprite.visible = on
+    pad.visible = padSprite.visible = on && boards
+    buy.visible = !on && boards
     ring.material = on ? ringMat : dimMat
   }
   show(false)
@@ -864,6 +952,8 @@ function gymRing(root) {
         world.removeCollider(board.collider, false)
         board.collider = null
       }
+      // A different save loaded (sign-out) without the ring: the board stands solid again.
+      if (!on && !board.collider && boards) board.collider = withColliderShift(plotX, () => solidBox(1.95, 1.9, 0.3, G.x, 1.9, G.z, G.facing))
       if (on && animate) popT = 0
     },
     setLabel(text) {
@@ -893,12 +983,29 @@ function gymRing(root) {
   }
 }
 
-export function buildBase(scene) {
+// x: the plot's offset along the path (0 = the player's plot). Copies at other plots are the
+// same build moved by x, colliders included; game.js drives only the player's (positions in
+// BASE are for it), remote.js drives a copy while another player owns that plot.
+// boards: false leaves out everything a visitor has no use for: the upgrade signs, the sell
+// stall, the Auto Machine's and the training ring's buy boards and the ring's upgrade pad.
+export function buildBase(scene, { x = 0, vacant = false, boards = true } = {}) {
   const root = new Group()
+  root.position.x = x
+  root.updateMatrixWorld(true)
   scene.add(root)
+  colliderShift.x = x // every collider made while building lands on this plot
+  try {
+    return buildBaseAt(scene, root, vacant, boards)
+  } finally {
+    colliderShift.x = 0
+  }
+}
+
+function buildBaseAt(scene, root, vacant, boards) {
   const emitters = []
   const npcs = []
-  buildPen(root)
+  const pen = buildPen(root, !boards) // the Expand Pen sign only where the boards are
+  pen.setLevel(0)
 
   // Machine pads: trim + grey checker top.
   for (const P of [BASE.pad, BASE.autoPad]) {
@@ -908,7 +1015,7 @@ export function buildBase(scene) {
   }
 
   const machine = baitTank(root, emitters, { ...BASE.machine, top: 'press' })
-  const auto = autoMachine(root, emitters)
+  const auto = autoMachine(root, emitters, boards)
   const tanks = {
     auto: passTank(root, emitters, BASE.tanks.auto, '#3d8bff', 'Auto Click', 6),
     xp: passTank(root, emitters, BASE.tanks.xp, '#c6ff3d', '2X XP', 8),
@@ -928,16 +1035,18 @@ export function buildBase(scene) {
   wire(root, [[B.xp.x, B.xp.z], [B.xp.x, B.xp.z + 1.4], [X.x - 1.6, B.xp.z + 1.4], [X.x - 1.6, X.z], [X.x - 1.2, X.z]], '#ffd21f')
 
   const S = BASE.signs
-  const signs = {
-    mult: sign(root, S.mult, { title: 'Upgrades', lines: ['1x > 1.5x cash'], button: { text: '$16', style: 'buy' } }),
-    xp: sign(root, S.xp, { title: 'Level 2', lines: ['1 xp > 1.25 xp'], button: { text: '$9', style: 'buy' } }),
-    slot: sign(root, S.slot, { title: '+1 Slot', lines: ['4/12 Animals'], button: { text: '$1,000', style: 'buy' } }),
-    auto: sign(root, S.auto, { title: 'Auto Machine', lines: ['3 tanks grow bait'], button: { text: '$9,600', style: 'poor' } }),
-  }
-  const sell = sellStall(root, scene, npcs)
-  const names = nameSign(root)
+  const signs = boards
+    ? {
+        mult: sign(root, S.mult, { title: 'Upgrades', lines: ['1x > 1.5x cash'], button: { text: '$16', style: 'buy' } }),
+        xp: sign(root, S.xp, { title: 'Level 2', lines: ['1 xp > 1.25 xp'], button: { text: '$9', style: 'buy' } }),
+        slot: sign(root, S.slot, { title: '+1 Slot', lines: ['4/12 Animals'], button: { text: '$1,000', style: 'buy' } }),
+        auto: sign(root, S.auto, { title: 'Auto Machine', lines: ['3 tanks grow bait'], button: { text: '$9,600', style: 'poor' } }),
+      }
+    : null
+  const sell = boards ? sellStall(root, scene, npcs) : null
+  const names = nameSign(root, vacant)
   const offline = offlinePile(root)
-  const gym = gymRing(root)
+  const gym = gymRing(root, boards)
 
   const R = INTERACT.radius
   const spots = {
@@ -947,15 +1056,16 @@ export function buildBase(scene) {
     autoBuy: { ...auto.board.spot, r: R.sign },
     auto: { x: B.auto.x, y: T + 1, z: B.auto.z, r: R.pass },
     xp: { x: B.xp.x, y: T + 1, z: B.xp.z, r: R.pass },
-    mult: { ...signs.mult.spot, r: R.sign },
-    xpSign: { ...signs.xp.spot, r: R.sign },
-    slot: { ...signs.slot.spot, r: R.sign },
-    autoSign: { ...signs.auto.spot, r: R.sign },
-    sell: { ...sell.spot, r: R.sell },
+    mult: { ...signs?.mult.spot, r: R.sign },
+    xpSign: { ...signs?.xp.spot, r: R.sign },
+    slot: { ...signs?.slot.spot, r: R.sign },
+    autoSign: { ...signs?.auto.spot, r: R.sign },
+    sell: { ...sell?.spot, r: R.sell },
     offline: { ...offline.spot, r: R.offline },
     gymBoard: { ...gym.board.spot, r: R.sign },
     gym: { x: BASE.gym.x, y: 1.6, z: BASE.gym.z, r: R.gym },
     gymPad: { x: BASE.gym.pad.x, y: 1.2, z: BASE.gym.pad.z, r: R.gymPad },
+    penSign: Object.assign(pen.spot, { r: R.sign }), // moves with the south fence (pen.setLevel)
   }
 
   bakeInPlace(root, true) // everything that never moves -> a few meshes
@@ -971,6 +1081,7 @@ export function buildBase(scene) {
     names,
     offline,
     gym,
+    pen, // .setLevel(n) = Expand Pen level, .south, .board (the sign)
     emitters,
     gymBusy: false, // set by training.js while the player trains
     update(dt, t) {

@@ -31,7 +31,8 @@
   width: 100%;
   height: calc(var(--ph) * var(--uiw-u));
   min-height: 44px;
-  padding: 0 calc(120 * var(--uiw-u)) 0 calc(135 * var(--uiw-u));
+  /* Right: room for the X (max(44px, 86u) wide, 14u in from the edge) plus a gap. */
+  padding: 0 calc(max(44px, 86 * var(--uiw-u)) + 34 * var(--uiw-u)) 0 calc(135 * var(--uiw-u));
   gap: calc(16 * var(--uiw-u));
   background: var(--head);
   border: max(2px, calc(6 * var(--uiw-u))) solid var(--uiw-ink);
@@ -209,6 +210,7 @@
 }
 .pw-name em {
   font-style: normal;
+  white-space: nowrap;
   color: var(--tag, #ffd21f);
 }
 .pw-sub {

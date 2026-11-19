@@ -1,10 +1,11 @@
 import { Vector3 } from 'three'
-import { ANIMALS, ANIMAL_SELL_MULT, INDEX, NEXT_SHOT, ZONES, laneLength, AUDIO, BAITS, BASE, GYM, HARPOON, MACHINE, OFFER, OFFLINE, PASSES, PETS, PLAY_BOOST, RARITIES, SAVE, SHINY, START_MONEY, STORE, UPGRADES as U } from './config.js'
-import { PenAnimal, animalDef, buildAnimal, rarityDef } from './animals.js'
+import { ANIMALS, ANIMAL_SELL_MULT, INDEX, NEXT_SHOT, ZONES, laneLength, zoneAt, AUDIO, BAITS, BASE, GYM, HARPOON, MACHINE, OFFER, OFFLINE, PASSES, PETS, PLAY_BOOST, RARITIES, SAVE, SHINY, SPAWN, START_MONEY, STORE, UPGRADES as U, PEN_SPAWN_GAP, penSouth } from './config.js'
+import { PenAnimal, animalDef, buildAnimal, rarityDef, setPenSouth } from './animals.js'
+import { sendFx } from './presence.js'
 import { baitName, buildBait, kindOf } from './bait.js'
 import { money as fmt, num } from './format.js'
 import { snd, sfx, spatial } from './audio/index.js'
-import { player } from './player.js'
+import { player, resetPlayer } from './player.js'
 
 // The game rules and state: money, the bait machine (XP, levels, regrowing bait),
 // the carried baits, upgrades, passes, potions, pets, the pen's animals and the
@@ -28,7 +29,7 @@ function defaults() {
     baitReady: true,
     baits: [], // carried baits: overall level index p of each
     selected: 0,
-    up: { mult: 0, xp: 0, slot: 0, autoSpeed: 0 },
+    up: { mult: 0, xp: 0, slot: 0, autoSpeed: 0, pen: 0 }, // pen = Expand Pen level (south fence)
     // The Auto Machine's three tanks (once passes.autoMachine is owned): each grows its own bait.
     auto: [0, 1, 2].map((i) => ({ p: 0, xp: BAITS.xpBase * MACHINE.autoStagger * i, ready: true })),
     passes: { autoClick: false, x2xp: false, x2cash: false, x2luck: false, autoMachine: false },
@@ -67,12 +68,20 @@ function load(given) {
   s.baits = s.baits.filter((p) => Number.isFinite(p)).slice(0, BAITS.carryMax)
   if (!Array.isArray(s.auto) || s.auto.length !== 3) s.auto = defaults().auto
   s.animals = s.animals.filter((a) => animalDef(a.species))
+  // Saves from before the rebalance: bait stops at BAITS.maxLevel, upgrades at their (lower) max.
+  const top = BAITS.maxLevel
+  s.machine.p = Math.min(top, s.machine.p | 0)
+  s.baits = s.baits.map((p) => Math.min(top, p))
+  s.auto.forEach((tk) => (tk.p = Math.min(top, tk.p | 0)))
+  for (const k of ['mult', 'xp', 'pen', 'autoSpeed']) s.up[k] = Math.min(U[k].max, s.up[k] | 0)
+  s.up.slot = Math.min(U.slot.max - U.slot.start, s.up.slot | 0)
   return s
 }
 
 const petDef = (id) => PETS.list.find((p) => p.id === id)
 // Pet followers reuse animal models at a small scale.
-const PET_MODEL = { dino: { id: 'raptor', scale: 0.42 }, chick: { id: 'duck', scale: 0.55, shiny: true }, mammoth: { id: 'mammoth', scale: 0.36 } }
+// (scales are on the calibrated species sizes, config SIZE: a ~1.15 m dino, ~0.75 m chick, ~1.25 m mammoth)
+export const PET_MODEL = { dino: { id: 'raptor', scale: 0.48 }, chick: { id: 'duck', scale: 0.62, shiny: true }, mammoth: { id: 'mammoth', scale: 0.27 } }
 
 export function createGame({ scene, base, harpoon, fx, camera }) {
   const S = load()
@@ -94,7 +103,8 @@ export function createGame({ scene, base, harpoon, fx, camera }) {
   const potionOn = (id) => S.potions[id] > now()
   const petBonus = (key) => S.pets.equipped.reduce((a, id) => a + (petDef(id)?.[key] ?? 0), 0)
   const capacity = () => U.slot.start + S.up.slot
-  const xpNeed = (p = S.machine.p) => BAITS.xpBase * Math.pow(BAITS.xpGrowth, p)
+  const xpNeed = (p = S.machine.p) => BAITS.xpBase * Math.pow(BAITS.xpGrowth, Math.min(p, BAITS.maxLevel))
+  const baitMaxed = (p) => p >= BAITS.maxLevel
   const xpBase = (lvl = S.up.xp) => MACHINE.xpPerPump * Math.pow(U.xp.ratio, lvl)
   const xpPerPump = () => xpBase() * (S.passes.x2xp ? 2 : 1) * (potionOn('xp') ? 2 : 1)
   const playBoost = () => Math.min(PLAY_BOOST.max, Math.floor(play / (PLAY_BOOST.every * 60)) * PLAY_BOOST.step)
@@ -112,10 +122,17 @@ export function createGame({ scene, base, harpoon, fx, camera }) {
     xp: () => Math.round(U.xp.base * Math.pow(U.xp.growth, S.up.xp)),
     slot: () => Math.round(U.slot.base * Math.pow(U.slot.growth, S.up.slot)),
     autoSpeed: () => Math.round(U.autoSpeed.base * Math.pow(U.autoSpeed.growth, S.up.autoSpeed)),
+    pen: () => Math.round(U.pen.base * Math.pow(U.pen.growth, S.up.pen)),
+  }
+  // A price that keeps up with the pen: at least `seconds` of its income, rounded to 2 digits.
+  function incomePrice(min, seconds) {
+    const raw = Math.max(min, game.totalIncome() * seconds)
+    const mag = Math.pow(10, Math.max(0, Math.floor(Math.log10(raw)) - 1))
+    return Math.ceil(raw / mag) * mag
   }
   const autoBase = (lvl = S.up.autoSpeed) => MACHINE.autoXpPerSecond * Math.pow(U.autoSpeed.ratio, lvl)
   const autoRate = () => autoBase() * (S.passes.x2xp ? 2 : 1) * (potionOn('xp') ? 2 : 1)
-  const maxed = { mult: () => S.up.mult >= U.mult.max, xp: () => S.up.xp >= U.xp.max, slot: () => capacity() >= U.slot.max, autoSpeed: () => S.up.autoSpeed >= U.autoSpeed.max }
+  const maxed = { mult: () => S.up.mult >= U.mult.max, xp: () => S.up.xp >= U.xp.max, slot: () => capacity() >= U.slot.max, autoSpeed: () => S.up.autoSpeed >= U.autoSpeed.max, pen: () => S.up.pen >= U.pen.max }
   const baitValue = (p) => Math.round(BAITS.sellBase * Math.pow(BAITS.sellGrowth, p))
   const animalValue = (a) => Math.round(baseIncome(a) * ANIMAL_SELL_MULT)
   // Training ring.
@@ -146,9 +163,19 @@ export function createGame({ scene, base, harpoon, fx, camera }) {
   }
 
   // --- Rolling a catch ------------------------------------------------------------------------
+  // Weights of the rarity tiers `tiers` (RARITIES indexes, low to high) at bait level p and luck L:
+  // luck lifts every tier above the lowest, and each tier keeps at least its `floor` share.
+  function rarityWeights(tiers, p, L) {
+    const q = Math.min(p, BAITS.maxLevel)
+    const w = tiers.map((i, j) => RARITIES[i].weight * Math.exp(RARITIES[i].k * q) * (j > 0 ? L : 1))
+    const sum = w.reduce((a, b) => a + b, 0)
+    return w.map((x, j) => Math.max(x, (RARITIES[tiers[j]].floor ?? 0) * sum))
+  }
+  const ALL_TIERS = RARITIES.map((r, i) => i)
+  const shinyChance = (x) => Math.min(SHINY.cap, SHINY.chance * x)
   function roll(p) {
     const L = luck()
-    const weights = RARITIES.map((r, i) => r.weight * Math.exp(r.k * p) * (i > 0 ? L : 1))
+    const weights = rarityWeights(ALL_TIERS, p, L)
     let x = Math.random() * weights.reduce((a, b) => a + b, 0)
     let ri = 0
     while (ri < weights.length - 1 && x >= weights[ri]) {
@@ -157,17 +184,38 @@ export function createGame({ scene, base, harpoon, fx, camera }) {
     }
     const pool = ANIMALS.filter((a) => a.rarity === RARITIES[ri].id)
     const def = pool[Math.floor(Math.random() * pool.length)]
-    return { species: def.id, shiny: Math.random() < SHINY.chance * L }
+    return { species: def.id, shiny: Math.random() < shinyChance(L) }
   }
   // Rarity odds (%) for the bait power p, for the HUD/windows.
   function odds(p) {
-    const L = luck()
-    const w = RARITIES.map((r, i) => r.weight * Math.exp(r.k * p) * (i > 0 ? L : 1))
+    const w = rarityWeights(ALL_TIERS, p, luck())
     const sum = w.reduce((a, b) => a + b, 0)
     return w.map((x) => (x / sum) * 100)
   }
 
   // --- Pen ------------------------------------------------------------------------------------
+  const penDepth = (lvl = S.up.pen) => Math.round(penSouth(lvl) - (BASE.pen.z - BASE.pen.half))
+  // Puts the pen's south fence (and its sign) at the Expand Pen level, tells the animals
+  // where it is and moves the spawn south of it. A player standing in the ground the fence
+  // just took in is set down outside it, at the sign. animate: the fence was just bought.
+  function applyPen(animate = false) {
+    const lvl = Math.max(0, Math.min(U.pen.max, S.up.pen | 0))
+    const before = base.pen.south
+    if (!base.pen.setLevel(lvl)) return
+    const south = base.pen.south
+    setPenSouth(0, south)
+    SPAWN.z = south + PEN_SPAWN_GAP
+    const p = player.position
+    if (Math.abs(p.x - BASE.pen.x) < BASE.pen.half + 0.8 && p.z > before - 0.5 && p.z < south + 1.2) {
+      resetPlayer({ x: base.spots.penSign.x, y: 0.05, z: base.spots.penSign.z + 0.6 }, Math.PI)
+    }
+    if (animate) {
+      for (let x = -BASE.pen.half; x <= BASE.pen.half; x += 2.75) fx.dust({ x: BASE.pen.x + x, y: 0.4, z: south }, '#d9c08a', 8, 2.2, 0.9)
+      fx.sparkle({ x: BASE.pen.x, y: 2.4, z: south }, '#7dff6a', 40, 6)
+      fx.ring({ x: BASE.pen.x, y: 0.1, z: (BASE.pen.z - BASE.pen.half + south) / 2 }, '#7dff6a', 10)
+    }
+  }
+  applyPen()
   function spawnAnimal(data, from) {
     const a = new PenAnimal(scene, data, incomeOf(data))
     a.nextPay = 0.3 + Math.random()
@@ -286,6 +334,42 @@ export function createGame({ scene, base, harpoon, fx, camera }) {
     },
     offerLeft: () => Math.max(0, (S.offerEnds - now()) / 1000),
 
+    // A potion's time from outside the Shop (the rewarded ad, once the server checked its token).
+    grantPotion(id, minutes) {
+      if (!STORE.potions[id] || !(minutes > 0)) return false
+      S.potions[id] = Math.max(now(), S.potions[id] ?? 0) + minutes * 60000
+      save()
+      return true
+    },
+
+    // What this player's base shows, for the other players (net.js -> remote.js): `pen` = the
+    // animals in the pen [uid, species, shiny, income] and the equipped pets; `mach` = the bait
+    // machine and Auto Machine tanks [kind, fill, label, colour, xp text, need text, ready, grow],
+    // the Auto Machine / pass tanks / training ring owned flags and the ring's label. JSON strings,
+    // so net.js can tell cheaply whether anything changed.
+    baseSnapshot() {
+      const r2 = (v) => Math.round(v * 100) / 100
+      const tank = (p, xp, ready, wait) => {
+        const k = kindOf(p)
+        return [k, r2(xp / xpNeed(p)), baitName(p), BAITS.kinds[k].color, num(xp), num(xpNeed(p)), ready ? 1 : 0, ready ? 1 : r2(1 - Math.max(0, wait) / BAITS.regrow)]
+      }
+      return {
+        pen: JSON.stringify({
+          a: animals.map((a) => [a.data.uid ?? 0, a.data.species, a.data.shiny ? 1 : 0, Math.round(incomeOf(a.data))]),
+          p: S.pets.equipped.slice(0, 8),
+        }),
+        mach: JSON.stringify({
+          m: tank(S.machine.p, S.machine.xp, S.baitReady, regrow),
+          am: S.passes.autoMachine ? 1 : 0,
+          at: S.passes.autoMachine ? S.auto.map((tk, i) => tank(tk.p, tk.xp, tk.ready, autoRegrow[i])) : [],
+          ac: S.passes.autoClick ? 1 : 0,
+          xx: S.passes.x2xp ? 1 : 0,
+          g: S.gym.owned ? `+${num(gymPerRep())} Strength` : '',
+          pl: Math.max(0, S.up.pen | 0), // Expand Pen level (where the south fence is)
+        }),
+      }
+    },
+
     setAvatar(root) {
       hand = null
       root?.traverse((o) => {
@@ -299,7 +383,8 @@ export function createGame({ scene, base, harpoon, fx, camera }) {
     pump(auto = false) {
       S.machine.xp += xpPerPump()
       let levelled = false
-      while (S.machine.xp >= xpNeed()) {
+      if (baitMaxed(S.machine.p)) S.machine.xp = Math.min(S.machine.xp, xpNeed())
+      while (!baitMaxed(S.machine.p) && S.machine.xp >= xpNeed()) {
         S.machine.xp -= xpNeed()
         const before = kindOf(S.machine.p)
         S.machine.p++
@@ -315,6 +400,7 @@ export function createGame({ scene, base, harpoon, fx, camera }) {
         lastPumpSound = tNow
         const { pan } = spatial(camera, BASE.machine.x, BASE.machine.z)
         snd.pump(S.machine.xp / xpNeed(), pan)
+        sendFx('pump', levelled ? { l: 1 } : undefined)
         fx.splash(MACHINE_AT, BAITS.kinds[kindOf(S.machine.p)].accent, auto ? 4 : 8)
         fx.popup({ x: MACHINE_AT.x - 1.6, y: MACHINE_AT.y + 2.6, z: MACHINE_AT.z }, `+${num(xpPerPump())} xp`, 'xp', 0.9)
       }
@@ -347,6 +433,7 @@ export function createGame({ scene, base, harpoon, fx, camera }) {
       regrow = BAITS.regrow
       base.machine.setGrow(0)
       snd.claimBait()
+      sendFx('claim')
       fx.sparkle(MACHINE_AT, BAITS.kinds[kindOf(S.machine.p)].color, 26, 4)
       fx.popup({ x: MACHINE_AT.x - 1.6, y: MACHINE_AT.y + 2, z: MACHINE_AT.z }, `+1 ${BAITS.kinds[kindOf(S.machine.p)].name}`, 'big')
       return true
@@ -372,6 +459,7 @@ export function createGame({ scene, base, harpoon, fx, camera }) {
       autoRegrow[i] = BAITS.regrow
       base.auto.tanks[i].setGrow(0)
       snd.claimBait()
+      sendFx('claimAuto', { i })
       const at = BASE.autoMachine.tanks[i]
       const kind = BAITS.kinds[kindOf(tk.p)]
       fx.sparkle({ x: at.x, y: T + 2, z: at.z }, kind.color, 26, 4)
@@ -400,17 +488,24 @@ export function createGame({ scene, base, harpoon, fx, camera }) {
       return p
     },
     strength: () => S.gym?.strength ?? 0,
-    // Longest shot (m) at full power: grows with Strength (log scale), capped by the Lane.
+    // Longest shot (m) at full power: grows with Strength (log scale). It may pass the Lane's
+    // end (the shot itself is clamped to the Lane), which makes Angelic a target (aimZones).
     maxDistance() {
       const R = HARPOON.reach
-      return Math.min(laneLength() - 8, R.base + R.k * Math.log2(1 + game.strength() / R.s0))
+      return R.base + R.k * Math.log2(1 + game.strength() / R.s0)
+    },
+    // How many zones (from Meadow) the Target picker offers: every zone below the one the
+    // longest shot reaches; all of them once the reach passes the Lane's end.
+    aimZones() {
+      const d = game.maxDistance()
+      return d >= laneLength() ? ZONES.length : zoneAt(d)
     },
     // Rolls the catch in zone `zone` for bait level p and the shot's luck multiplier.
     rollShot(p, shotLuck, zone) {
       const L = luck() * Math.pow(Math.max(1, shotLuck), HARPOON.luckPower)
       const pool = ANIMALS.filter((a) => a.zone === ZONES[zone].id)
-      const tiers = RARITIES.map((r, i) => i).filter((i) => pool.some((a) => a.rarity === RARITIES[i].id))
-      const w = tiers.map((i, j) => RARITIES[i].weight * Math.exp(RARITIES[i].k * p) * (j > 0 ? L : 1))
+      const tiers = ALL_TIERS.filter((i) => pool.some((a) => a.rarity === RARITIES[i].id))
+      const w = rarityWeights(tiers, p, L)
       let x = Math.random() * w.reduce((a, b) => a + b, 0)
       let j = 0
       while (j < w.length - 1 && x >= w[j]) {
@@ -419,25 +514,24 @@ export function createGame({ scene, base, harpoon, fx, camera }) {
       }
       const list = pool.filter((a) => a.rarity === RARITIES[tiers[j]].id)
       const def = list[Math.floor(Math.random() * list.length)]
-      return { species: def.id, shiny: Math.random() < Math.min(0.5, SHINY.chance * luck() * Math.sqrt(Math.max(1, shotLuck))) }
+      return { species: def.id, shiny: Math.random() < shinyChance(luck() * Math.sqrt(Math.max(1, shotLuck))) }
     },
     // "1 in N": how rare this species is in its zone for bait level p (no luck).
     oneIn(species, p) {
       const def = animalDef(species)
       const pool = ANIMALS.filter((a) => a.zone === def.zone)
-      const tiers = RARITIES.filter((r) => pool.some((a) => a.rarity === r.id))
-      const w = tiers.map((r) => r.weight * Math.exp(r.k * p))
+      const tiers = ALL_TIERS.filter((i) => pool.some((a) => a.rarity === RARITIES[i].id))
+      const w = rarityWeights(tiers, p, 1)
       const sum = w.reduce((a, b) => a + b, 0)
-      const ti = tiers.findIndex((r) => r.id === def.rarity)
+      const ti = tiers.findIndex((i) => RARITIES[i].id === def.rarity)
       const share = pool.filter((a) => a.rarity === def.rarity).length
       return Math.max(1, Math.round(sum / w[ti] * share))
     },
     // The "Next Shot 100x Luck" boost (money only).
-    nextShotPrice() {
-      const raw = Math.max(NEXT_SHOT.base, game.totalIncome() * NEXT_SHOT.incomeSeconds)
-      const mag = Math.pow(10, Math.max(0, Math.floor(Math.log10(raw)) - 1))
-      return Math.ceil(raw / mag) * mag
-    },
+    nextShotPrice: () => incomePrice(NEXT_SHOT.base, NEXT_SHOT.incomeSeconds),
+    // Potions cost at least `incomeSeconds` of the pen's income (STORE.potions).
+    potionPrice: (id) => incomePrice(STORE.potions[id].price, STORE.potions[id].incomeSeconds ?? 0),
+    bundlePrice: () => Math.round(STORE.bundle.potions.reduce((s, id) => s + game.potionPrice(id), 0) * (1 - STORE.sale)),
     get nextShotReady() {
       return !!S.nextShot
     },
@@ -466,6 +560,7 @@ export function createGame({ scene, base, harpoon, fx, camera }) {
       if (r >= 3 || data.shiny) fx.confetti({ x: at.x, y: 2, z: at.z }, undefined, 30 + r * 10)
       const record = { uid: uid++, species: data.species, shiny: data.shiny }
       S.animals.push(record)
+      sendFx('caught', { s: data.species, h: data.shiny ? 1 : 0, u: record.uid })
       S.catches++
       const entry = (S.index[data.species] ??= { n: 0, shiny: false })
       const first = entry.n === 0
@@ -518,9 +613,14 @@ export function createGame({ scene, base, harpoon, fx, camera }) {
         return false
       }
       const price = cost[id]()
-      const names = { mult: `Cash x${multValue(S.up.mult + 1)}!`, xp: `Bait XP ${num(xpBase(S.up.xp + 1))}/pump!`, slot: `Pen: ${capacity() + 1} slots!`, autoSpeed: `Auto Machine ${num(autoBase(S.up.autoSpeed + 1))} xp/s!` }
+      const names = { mult: `Cash x${multValue(S.up.mult + 1)}!`, xp: `Bait XP ${num(xpBase(S.up.xp + 1))}/pump!`, slot: `Pen: ${capacity() + 1} slots!`, autoSpeed: `Auto Machine ${num(autoBase(S.up.autoSpeed + 1))} xp/s!`, pen: `Pen expanded to ${penDepth(S.up.pen + 1)} m!` }
       if (!spend(price, names[id])) return false
       S.up[id]++
+      if (id === 'pen') {
+        applyPen(true)
+        save()
+        return true
+      }
       const at = { mult: BASE.signs.mult, xp: BASE.signs.xp, slot: BASE.signs.slot, autoSpeed: BASE.signs.auto }[id]
       fx.coins({ x: at.x, y: 3.2, z: at.z + 0.6 }, 14)
       fx.sparkle({ x: at.x, y: 2.6, z: at.z + 0.6 }, '#7dff6a', 22, 4)
@@ -534,6 +634,7 @@ export function createGame({ scene, base, harpoon, fx, camera }) {
       const name = id === 'autoMachine' ? U.auto.name : PASSES[id].name
       if (!spend(price, `${name} unlocked!`)) return false
       S.passes[id] = true
+      sendFx('bought', { id })
       const at = id === 'autoClick' ? BASE.tanks.auto : id === 'x2xp' ? BASE.tanks.xp : id === 'autoMachine' ? BASE.autoPad : null
       if (at) {
         fx.sparkle({ x: at.x, y: 2.5, z: at.z + 0.5 }, '#7dff6a', 36, 5)
@@ -562,6 +663,7 @@ export function createGame({ scene, base, harpoon, fx, camera }) {
       }
       if (!spend(GYM.price, 'Training Ring unlocked! Train to get stronger.')) return false
       S.gym.owned = true
+      sendFx('bought', { id: 'gym' })
       base.gym.setOwned(true, true)
       const at = BASE.gym
       fx.confetti({ x: at.x, y: 2.5, z: at.z }, undefined, 44)
@@ -597,6 +699,7 @@ export function createGame({ scene, base, harpoon, fx, camera }) {
       const gain = gymPerRep()
       S.gym.strength = Math.round((S.gym.strength + gain) * 100) / 100
       S.gym.xp++
+      sendFx('rep')
       let levelled = false
       while (S.gym.xp >= gymXpNeed()) {
         S.gym.xp -= gymXpNeed()
@@ -608,14 +711,14 @@ export function createGame({ scene, base, harpoon, fx, camera }) {
 
     buyPotion(id) {
       const P = STORE.potions[id]
-      if (!spend(P.price, `${P.name} active!`)) return false
+      if (!spend(game.potionPrice(id), `${P.name} active!`)) return false
       S.potions[id] = Math.max(now(), S.potions[id]) + P.minutes * 60000
       save()
       return true
     },
     buyBundle() {
       const B = STORE.bundle
-      if (!spend(B.price, `${B.name} active!`)) return false
+      if (!spend(game.bundlePrice(), `${B.name} active!`)) return false
       for (const id of B.potions) S.potions[id] = Math.max(now(), S.potions[id]) + STORE.potions[id].minutes * 60000
       save()
       return true
@@ -842,6 +945,7 @@ export function createGame({ scene, base, harpoon, fx, camera }) {
         { ...sp.mult, info: () => (maxed.mult() ? { title: 'Cash Multiplier', verb: 'Maxed', off: true } : { title: `Cash x${multValue()} > x${multValue(S.up.mult + 1)}`, verb: 'Upgrade', ...price(cost.mult()) }), run: () => game.buyUpgrade('mult') },
         { ...sp.xpSign, info: () => (maxed.xp() ? { title: 'Bait XP', verb: 'Maxed', off: true } : { title: `Bait XP Level ${S.up.xp + 2}`, verb: 'Upgrade', ...price(cost.xp()) }), run: () => game.buyUpgrade('xp') },
         { ...sp.slot, info: () => (maxed.slot() ? { title: 'Pen Slots', verb: 'Maxed', off: true } : { title: `+1 Pen Slot (${capacity()}/${U.slot.max})`, verb: 'Buy', ...price(cost.slot()) }), run: () => game.buyUpgrade('slot') },
+        { ...sp.penSign, info: () => (maxed.pen() ? { title: 'Expand Pen', verb: 'Maxed', off: true } : { title: `Expand Pen ${penDepth()} m > ${penDepth(S.up.pen + 1)} m`, verb: 'Expand', ...price(cost.pen()) }), run: () => game.buyUpgrade('pen') },
         { ...sp.autoBuy, enabled: () => !S.passes.autoMachine, info: () => ({ title: 'Auto Machine', verb: 'Buy', ...price(U.auto.price) }), run: () => game.buyPass('autoMachine') },
         {
           ...sp.autoSign,
@@ -911,7 +1015,8 @@ export function createGame({ scene, base, harpoon, fx, camera }) {
         S.auto.forEach((tk, i) => {
           tk.xp += rate * dt
           let levelled = false
-          while (tk.xp >= xpNeed(tk.p)) {
+          if (baitMaxed(tk.p)) tk.xp = Math.min(tk.xp, xpNeed(tk.p))
+          while (!baitMaxed(tk.p) && tk.xp >= xpNeed(tk.p)) {
             tk.xp -= xpNeed(tk.p)
             tk.p++
             levelled = true
@@ -1011,7 +1116,7 @@ export function createGame({ scene, base, harpoon, fx, camera }) {
       const kind = kindOf(S.machine.p)
       base.machine.setBait(kind)
       base.machine.setFill(S.machine.xp / xpNeed())
-      base.machine.setLabel(baitName(S.machine.p), BAITS.kinds[kind].color, S.machine.xp, xpNeed(), num(S.machine.xp), num(xpNeed()))
+      base.machine.setLabel(baitName(S.machine.p), BAITS.kinds[kind].color, S.machine.xp, xpNeed(), baitMaxed(S.machine.p) ? 'MAX' : num(S.machine.xp), baitMaxed(S.machine.p) ? 'MAX' : num(xpNeed()))
       base.machine.setReady(S.baitReady)
       base.auto.setOwned(S.passes.autoMachine)
       if (S.passes.autoMachine) {
@@ -1020,7 +1125,7 @@ export function createGame({ scene, base, harpoon, fx, camera }) {
           const k = kindOf(tk.p)
           t.setBait(k)
           t.setFill(tk.xp / xpNeed(tk.p))
-          t.setLabel(baitName(tk.p), BAITS.kinds[k].color, tk.xp, xpNeed(tk.p), num(tk.xp), num(xpNeed(tk.p)))
+          t.setLabel(baitName(tk.p), BAITS.kinds[k].color, tk.xp, xpNeed(tk.p), baitMaxed(tk.p) ? 'MAX' : num(tk.xp), baitMaxed(tk.p) ? 'MAX' : num(xpNeed(tk.p)))
           t.setReady(tk.ready)
           if (tk.ready) t.setGrow(1)
         })
@@ -1035,6 +1140,7 @@ export function createGame({ scene, base, harpoon, fx, camera }) {
         base.signs.mult.set({ title: 'Upgrades', lines: [`${multValue()}x > ${multValue(S.up.mult + 1)}x cash`], button: btn(cost.mult(), maxed.mult()) })
         base.signs.xp.set({ title: `Level ${S.up.xp + 2}`, lines: [`${num(xpBase())} xp > ${num(xpBase(S.up.xp + 1))} xp`], button: btn(cost.xp(), maxed.xp()) })
         base.signs.slot.set({ title: '+1 Slot', lines: [`${animals.length}/${capacity()} Animals`], button: btn(cost.slot(), maxed.slot()) })
+        base.pen.board?.set({ title: 'Expand Pen', lines: [maxed.pen() ? `${penDepth()} m deep` : `${penDepth()} m > ${penDepth(S.up.pen + 1)} m deep`], button: btn(cost.pen(), maxed.pen()) })
         if (!S.passes.autoMachine) {
           base.auto.board.set({ title: 'Auto Machine', lines: ['3 tanks grow bait'], button: btn(U.auto.price, false) })
           base.signs.auto.set({ title: 'Auto Speed', lines: ['Needs the Auto Machine'], button: { text: 'LOCKED', style: 'poor' } })
@@ -1099,6 +1205,7 @@ export function createGame({ scene, base, harpoon, fx, camera }) {
     for (const a of [...animals]) removeAnimal(a.data.uid)
     for (const k of Object.keys(S)) delete S[k]
     Object.assign(S, next)
+    applyPen() // the fence first: the animals are placed inside it
     for (const data of S.animals) spawnAnimal(data)
     uid = S.animals.reduce((m, a) => Math.max(m, a.uid ?? 0), 0) + 1
     regrow = S.baitReady ? 0 : BAITS.regrow

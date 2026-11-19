@@ -1,5 +1,5 @@
 import { Box3, Color, Group, Vector3 } from 'three'
-import { ANIMALS, BASE, RARITIES, SHINY } from './config.js'
+import { ANIMALS, BASE, RARITIES, SHINY, penSouth } from './config.js'
 import { cube, mat } from './voxel.js'
 import { billboard, outlined } from './billboard.js'
 import { compact } from './bake.js'
@@ -662,20 +662,29 @@ function addExtras(r, look) {
   }
 }
 
+const _box = new Box3()
+const _size = new Vector3()
 export function buildAnimal(id, { shiny = false } = {}) {
   const def = animalDef(id)
   const look = def?.look ?? {}
   const r = makeRig(shiny, look)
   ;(BUILD[def?.base ?? id] ?? BUILD[id] ?? BUILD.chicken)(r)
   addExtras(r, look)
-  if (look.scale && look.scale !== 1) {
+  // Calibrated size (config SIZE): the base model is scaled to the species' height.
+  const scale = def?.size ? def.size / r.height : 1
+  if (Math.abs(scale - 1) > 0.001) {
     r.root.children.forEach((c) => {
-      c.position.multiplyScalar(look.scale)
-      c.scale.multiplyScalar(look.scale)
+      c.position.multiplyScalar(scale)
+      c.scale.multiplyScalar(scale)
     })
-    r.height *= look.scale
-    r.stride *= look.scale
+    r.height *= scale
+    r.stride *= scale
   }
+  r.scale = scale
+  // Footprint radius (half the longest side seen from above), for pen margins and spacing.
+  r.root.updateMatrixWorld(true)
+  _box.setFromObject(r.root).getSize(_size)
+  r.radius = Math.max(_size.x, _size.z) / 2
   r.root.traverse((o) => {
     if (o.isMesh) {
       o.castShadow = true
@@ -725,24 +734,35 @@ export function buildAnimal(id, { shiny = false } = {}) {
 
 // --- In the pen ------------------------------------------------------------------------------
 let nextId = 1
-// Pen interior with a margin, minus the decorated corners.
-function penBounds() {
-  const p = BASE.pen
-  const m = 1.6
-  return { minX: p.x - p.half + m, maxX: p.x + p.half - m, minZ: p.z - p.half + m, maxZ: p.z + p.half - m }
+// Where each plot's south fence is (Expand Pen moves it): plot x offset -> z. game.js sets
+// the player's (ox 0); a plot not set is at level 0.
+const penSouths = new Map()
+export function setPenSouth(ox, z) {
+  penSouths.set(ox, z)
 }
-function inCorner(x, z) {
+const southOf = (ox) => penSouths.get(ox) ?? penSouth(0)
+// Pen interior with a margin, minus the decorated corners. ox: the plot's x offset (another
+// player's pen, see remote.js; 0 = the player's own). r: the animal's footprint radius, so a
+// big one (dinosaurs...) keeps its whole body inside the fence.
+function penBounds(ox = 0, r = 0) {
+  const p = BASE.pen
+  const m = Math.max(1.6, r * 0.85 + 0.5)
+  return { minX: ox + p.x - p.half + m, maxX: ox + p.x + p.half - m, minZ: p.z - p.half + m, maxZ: southOf(ox) - m }
+}
+function inCorner(x, z, ox = 0) {
+  x -= ox
   const p = BASE.pen
   const E = p.x + p.half
-  const S = p.z + p.half
+  const S = southOf(ox)
   const N = p.z - p.half
   return (x > E - 4.5 && z > S - 3) || (x > E - 2.8 && z < N + 4.6)
 }
 
 export class PenAnimal {
-  // data: { id, species, shiny }
-  constructor(scene, data, income) {
+  // data: { id, species, shiny }. ox: the plot's x offset (0 = the player's own pen).
+  constructor(scene, data, income, ox = 0) {
     this.data = data
+    this.ox = ox
     this.uid = data.uid ?? nextId++
     this.def = animalDef(data.species)
     this.rarity = rarityDef(this.def.rarity)
@@ -773,11 +793,11 @@ export class PenAnimal {
   }
 
   placeRandom() {
-    const b = penBounds()
+    const b = penBounds(this.ox, this.rig.radius)
     for (let i = 0; i < 20; i++) {
       const x = b.minX + Math.random() * (b.maxX - b.minX)
       const z = b.minZ + Math.random() * (b.maxZ - b.minZ)
-      if (!inCorner(x, z)) {
+      if (!inCorner(x, z, this.ox)) {
         this.root.position.set(x, 0, z)
         break
       }
@@ -787,11 +807,11 @@ export class PenAnimal {
 
   // Jump from `from` into the pen along an arc (the harpoon delivery).
   flyFrom(from, duration, onLand) {
-    const b = penBounds()
+    const b = penBounds(this.ox, this.rig.radius)
     let tx = b.minX + 2 + Math.random() * (b.maxX - b.minX - 4)
     let tz = b.minZ + 2 + Math.random() * (b.maxZ - b.minZ - 4)
-    if (inCorner(tx, tz)) {
-      tx = BASE.pen.x
+    if (inCorner(tx, tz, this.ox)) {
+      tx = this.ox + BASE.pen.x
       tz = BASE.pen.z
     }
     this.fly = { from: { ...from }, to: { x: tx, z: tz }, t: 0, d: duration, onLand }
@@ -800,11 +820,11 @@ export class PenAnimal {
   }
 
   pickTarget() {
-    const b = penBounds()
+    const b = penBounds(this.ox, this.rig.radius)
     for (let i = 0; i < 12; i++) {
       const x = b.minX + Math.random() * (b.maxX - b.minX)
       const z = b.minZ + Math.random() * (b.maxZ - b.minZ)
-      if (!inCorner(x, z)) {
+      if (!inCorner(x, z, this.ox)) {
         this.target.x = x
         this.target.z = z
         return
@@ -867,13 +887,13 @@ export class PenAnimal {
         const dx = p.x - o.root.position.x
         const dz = p.z - o.root.position.z
         const d = Math.hypot(dx, dz)
-        const min = (this.rig.height + o.rig.height) * 0.32
+        const min = Math.max((this.rig.height + o.rig.height) * 0.32, (this.rig.radius + o.rig.radius) * 0.6)
         if (d > 0.001 && d < min) {
           p.x += (dx / d) * (min - d) * 0.5
           p.z += (dz / d) * (min - d) * 0.5
         }
       }
-      const b = penBounds()
+      const b = penBounds(this.ox, this.rig.radius)
       p.x = Math.max(b.minX, Math.min(b.maxX, p.x))
       p.z = Math.max(b.minZ, Math.min(b.maxZ, p.z))
     }

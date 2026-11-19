@@ -81,6 +81,23 @@ export function uiButton(html, color, onClick, className = '') {
 // skin 'panel' (uiPanel.css): a coloured header bar with the title, the X inside it on the right,
 // and a dark see-through body under it (the Shop / Sell / Pets windows).
 // Returns { overlay, dialog, body, extra (header slot right of the title), setTitle, open, close, toggle, isOpen }.
+// fn(open) when a window opens (true) or the last one closes (false): main.js reports Boxity's
+// screen ads ('panel' / 'gameplay').
+const windowListeners = new Set()
+export function onWindowChange(fn) {
+  windowListeners.add(fn)
+  return () => windowListeners.delete(fn)
+}
+const emitWindows = (open) => {
+  for (const fn of windowListeners) {
+    try {
+      fn(open)
+    } catch {
+      // Cosmetic.
+    }
+  }
+}
+
 export function createWindow({ title, icon = '', className = '', skin = '', onOpen, onClose } = {}) {
   const overlay = document.createElement('div')
   overlay.className = `uiw-overlay ${skin ? `uiw-${skin} ` : ''}${className}`.trim()
@@ -131,6 +148,7 @@ export function createWindow({ title, icon = '', className = '', skin = '', onOp
       current = win
       shown = true
       document.body.classList.add('uiw-open') // hud.css folds the HUD away on touch
+      emitWindows(true)
       clearTimeout(closing)
       overlay.classList.remove('closing')
       onOpen?.()
@@ -152,6 +170,7 @@ export function createWindow({ title, icon = '', className = '', skin = '', onOp
       if (current === win) current = null
       if (!current) document.body.classList.remove('uiw-open')
       onClose?.()
+      if (!current) emitWindows(false)
     },
     toggle: () => (win.isOpen() ? win.close() : win.open()),
   }

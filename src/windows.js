@@ -1,5 +1,7 @@
 import './windows.css'
-import { ANIMALS, BAITS, PASSES, PETS, RARITIES, STORE, UPGRADES } from './config.js'
+import './indexWindow.css'
+import './panelWindows.css'
+import { ANIMALS, BAITS, INDEX, PASSES, PETS, RARITIES, STORE, UPGRADES, ZONES } from './config.js'
 import { createWindow, replay } from './uiWindow.js'
 import { ICONS } from './icons.js'
 import { THUMBS } from './thumbs.js'
@@ -13,7 +15,7 @@ import { burst, centre } from './juice.js'
 //                   potions, the Lucky Chick and the Auto Machine
 //   pets          - panel skin: "n/m Pets Active", equip / unequip / buy rows, Equip Best
 //   sell          - panel skin: Animals / Baits tabs, grouped rows, total value + Sell All
-//   index         - every animal (silhouettes until caught) + current bait odds
+//   index         - Pet Index: every zone's animals (silhouettes until caught), rewards, zone bonus
 //   offer         - the limited OP pet
 // Everything is priced in money (project rule: nothing costs premium currency).
 const POTION_COLOR = { luck: '#62e34a', cash: '#ffd21f', xp: '#4fb6ff' }
@@ -153,7 +155,7 @@ export function createWindows(game) {
     const potions = el('div', 'shop-grid three')
     for (const [id, p] of Object.entries(STORE.potions)) {
       const on = game.potionOn(id)
-      const c = card({ color: 'blue', icon: ICONS.flask(POTION_COLOR[id]), badge: '2x', name: p.name.replace(' Potion', ''), desc: on ? `Active ${clock((S.potions[id] - Date.now()) / 1000)}` : `${p.minutes} min`, price: p.price, owned: false, buy: () => game.buyPotion(id) })
+      const c = card({ color: 'blue', icon: ICONS.flask(POTION_COLOR[id]), badge: '2x', name: p.name.replace(' Potion', ''), desc: on ? `Active ${clock((S.potions[id] - Date.now()) / 1000)}` : `${p.minutes} min`, price: game.potionPrice(id), owned: false, buy: () => game.buyPotion(id) })
       potions.append(c)
     }
     scroll.append(potions)
@@ -209,45 +211,102 @@ export function createWindows(game) {
     tick(pets, 'pets', paintPetTotal)
   }
 
-  // --- Index -----------------------------------------------------------------------------------
+  // --- Pet Index -------------------------------------------------------------------------------
+  // One section per Lane zone: the zone's picture, its animals as rarity-coloured tiles
+  // (silhouettes + ??? until caught), "Collect all Pets for +20% Cash" with a progress bar.
+  // The right panel shows the selected animal and its one-time reward (income * claimSeconds);
+  // CLAIM ALL claims every discovered, unclaimed reward. All rewards are money.
   const index = createWindow({
-    title: 'Index',
+    title: 'Pet Index',
     icon: ICONS.book,
-    className: 'win-index',
+    className: 'win-index2',
+    skin: 'panel',
     onOpen: () => {
       fillIndex()
       game.markIndexSeen()
     },
   })
+  index.extra.innerHTML = `<span class="pi-complete"><b class="uiw-text"></b><small class="uiw-text"></small></span>`
+  let selected = null
+  let indexScroll = 0
+  const tileBg = (r) => `linear-gradient(${r.tile[0]}, ${r.tile[1]})`
+  function paintIndexHead() {
+    const found = ANIMALS.filter((a) => S.index[a.id]?.n).length
+    index.extra.querySelector('b').textContent = `${Math.floor((found / ANIMALS.length) * 100)}% Complete`
+    index.extra.querySelector('small').textContent = `${found} / ${ANIMALS.length} Discovered`
+  }
+  function paintDetail(panel) {
+    const a = ANIMALS.find((x) => x.id === selected) ?? ANIMALS[0]
+    const r = RARITIES.find((x) => x.id === a.rarity)
+    const known = !!S.index[a.id]?.n
+    const claimed = !!S.claimed?.[a.id]
+    panel.innerHTML = `
+      <div class="pi-big" style="--tile:${tileBg(r)}">
+        <img src="${(known ? THUMBS.animal[a.id] : THUMBS.silhouette[a.id]) ?? ''}" alt="">
+        <b class="uiw-text">${known ? esc(a.name) : '???'}</b>
+        <span class="uiw-text pi-rar" style="color:${r.color}">${r.name}</span>
+        <span class="uiw-text pi-inc">${money(a.income)}/s</span>
+      </div>
+      <div class="pi-reward"><span class="uiw-text">Rewards:</span><div class="pi-cash">${ICONS.cash}<b class="uiw-text">+${money(game.indexReward(a.id))}</b></div></div>`
+    const btn = pwButton(claimed ? 'Claimed' : 'Claim', () => {
+      const got = game.claimIndex(a.id)
+      if (!got) return false
+      fillIndex()
+      return true
+    }, known && !claimed ? 'green' : 'done', 'pi-claim')
+    btn.disabled = !known || claimed
+    panel.append(btn)
+  }
   function fillIndex() {
     const body = index.body
+    const prev = body.querySelector('.pi-scroll')
+    if (prev) indexScroll = prev.scrollTop
     body.innerHTML = ''
-    const found = ANIMALS.filter((a) => S.index[a.id]?.n).length
-    const head = el('div', 'index-head')
-    head.innerHTML = `<b class="uiw-text">Discovered ${found}/${ANIMALS.length}</b>`
-    // Odds with the best bait you can use right now.
-    const p = S.baits.length ? Math.max(...S.baits) : S.machine.p
-    const odds = game.odds(p)
-    const oddsEl = el('div', 'index-odds')
-    oddsEl.innerHTML = `<span>${baitName(p)} odds:</span>` + RARITIES.map((r, i) => `<i style="--c:${r.color}">${r.name} ${odds[i] < 0.1 ? odds[i].toFixed(2) : odds[i].toFixed(1)}%</i>`).join('')
-    head.append(oddsEl)
-    body.append(head)
-    const scroll = el('div', 'win-scroll')
-    const grid = el('div', 'win-grid index-grid')
-    for (const a of ANIMALS) {
-      const e = S.index[a.id]
-      const r = RARITIES.find((x) => x.id === a.rarity)
-      const card = el('div', `win-card animal${e?.n ? '' : ' unknown'}`)
-      card.style.setProperty('--rc', r.color)
-      card.innerHTML = `<img src="${(e?.n ? THUMBS.animal[a.id] : THUMBS.silhouette[a.id]) ?? ''}" alt="">
-        <span class="card-rarity uiw-text">${r.name}</span>
-        <b class="uiw-text">${e?.n ? a.name : '???'}</b>
-        <span class="card-desc">${money(a.income)}/s</span>
-        <span class="card-sub">${e?.n ? `Caught x${e.n}` : 'Not found yet'}${e?.shiny ? ` <span class="shiny">${ICONS.star}</span>` : ''}</span>`
-      grid.append(card)
-    }
-    scroll.append(grid)
-    body.append(scroll)
+    paintIndexHead()
+    if (!selected) selected = (ANIMALS.find((a) => S.index[a.id]?.n) ?? ANIMALS[0]).id
+    const left = el('div', 'pi-left')
+    const scroll = el('div', 'pi-scroll')
+    ZONES.forEach((z, zi) => {
+      const list = ANIMALS.filter((a) => a.zone === z.id)
+      const found = game.zoneFound(z.id)
+      const sec = el('section', 'pi-zone')
+      const pic = THUMBS.zone?.[zi]
+      sec.innerHTML = `<div class="pi-pic" style="--zc:${z.ground}">${pic ? `<img src="${pic}" alt="">` : ''}<b class="uiw-text">${z.name}</b></div>`
+      const grid = el('div', 'pi-grid')
+      for (const a of list) {
+        const r = RARITIES.find((x) => x.id === a.rarity)
+        const known = !!S.index[a.id]?.n
+        const t = el('button', `pi-tile${known ? ' known' : ''}${a.id === selected ? ' sel' : ''}`)
+        t.type = 'button'
+        t.style.setProperty('--tile', tileBg(r))
+        t.setAttribute('aria-label', known ? a.name : 'Undiscovered animal')
+        t.innerHTML = `<span class="uiw-text pi-name">${known ? esc(a.name) : '???'}</span>
+          <img src="${(known ? THUMBS.animal[a.id] : THUMBS.silhouette[a.id]) ?? ''}" alt="">
+          <span class="uiw-text pi-foot">${known ? `${money(a.income)}/s` : '???'}</span>
+          ${known && !S.claimed?.[a.id] ? '<i class="pi-dot"></i>' : ''}`
+        t.addEventListener('click', () => {
+          selected = a.id
+          for (const o of scroll.querySelectorAll('.pi-tile.sel')) o.classList.remove('sel')
+          t.classList.add('sel')
+          paintDetail(right)
+        })
+        grid.append(t)
+      }
+      const goal = el('div', 'pi-goal')
+      goal.innerHTML = `<span class="uiw-text">Collect all Pets for +${Math.round(INDEX.zoneBonus * 100)}% Cash</span>
+        <div class="pi-bar${found >= list.length ? ' full' : ''}"><i style="width:${(found / list.length) * 100}%"></i><b class="uiw-text">${found}/${list.length}</b><span class="pi-bar-ico">${ICONS.cash}</span></div>`
+      const col = el('div', 'pi-col')
+      col.append(grid, goal)
+      sec.append(col)
+      scroll.append(sec)
+    })
+    const n = game.indexClaimable().length
+    const all = pwButton(`<span class="pi-book">${ICONS.book}</span>CLAIM ALL (${n})!`, () => (game.claimAllIndex() ? (fillIndex(), true) : false), n ? 'blue' : 'done', 'pi-all')
+    left.append(scroll, all)
+    const right = el('div', 'pi-right')
+    paintDetail(right)
+    body.append(left, right)
+    scroll.scrollTop = indexScroll
   }
 
   // --- Sell ------------------------------------------------------------------------------------

@@ -2,7 +2,7 @@
 // here may throw when the SDK is missing: a blocked sdk.bloxity.io leaves the
 // game fully playable on the default avatar and keyboard controls.
 // Docs: https://docs.bloxity.io/#html5
-import { GAME_SLUG, GAME_TITLE, SETTINGS, DEV_MODE, coerceSetting } from './config.js'
+import { GAME_SLUG, GAME_TITLE, LEADERBOARDS, SETTINGS, DEV_MODE, coerceSetting } from './config.js'
 
 export function sdk() {
   if (DEV_MODE) return null
@@ -24,6 +24,9 @@ const proportionListeners = new Set()
 const authListeners = new Set()
 const settingListeners = new Set()
 const respawnListeners = new Set()
+const emoteListeners = new Set()
+const chatListeners = new Set()
+const adBreakListeners = new Set()
 const unsubscribers = []
 
 function emit(listeners, ...args) {
@@ -177,11 +180,17 @@ export function init() {
       )
     }
 
+    // Portal -> game events: the menu's Reset Character, emotes picked in Boxity's wheel (replicated
+    // to the other players by main.js / net.js), and the portal taking the mouse.
     unsubscribers.push(
-      SDK.player.onEvent((event) => {
+      SDK.player.onEvent((event, data) => {
         if (event === 'respawn_request') emit(respawnListeners)
+        else if (event === 'play_emote' && typeof data === 'string') emit(emoteListeners, data)
+        else if (event === 'stop_emote') emit(emoteListeners, null)
+        else if (event === 'pointer_lock_changed' && data === false) document.exitPointerLock?.()
       }),
     )
+    platformFeatures(SDK)
 
     SDK.game.loadingStep('Building the island')
   } catch (err) {
@@ -255,6 +264,37 @@ export function getProportions() {
 export function getSkinTextureUrl() {
   try {
     const url = sdk()?.avatar?.getSkinTextureUrl?.()
+    return typeof url === 'string' && url ? url : null
+  } catch {
+    return null
+  }
+}
+
+// --- Other players' looks (remote.js) -------------------------------------------------------
+// The local player's outfit key: one string naming everything they wear (+ proportions), which
+// the other players dress their copy of this character with. '' without the SDK.
+export function getOutfitKey() {
+  try {
+    const key = sdk()?.avatar?.getOutfitKey?.()
+    return typeof key === 'string' ? key : ''
+  } catch {
+    return ''
+  }
+}
+// The SDK's platform character kit (Legion.SDK.character), or null: dress(options) puts a whole
+// look on a player.glb rig from an outfit key (null when the kit is off for this game).
+export function characterKit() {
+  try {
+    const kit = sdk()?.character
+    return typeof kit?.dress === 'function' ? kit : null
+  } catch {
+    return null
+  }
+}
+// Another player's skin texture (with their worn face, shirt and pants), from their equipped ids.
+export function getSkinTextureUrlFor(equipped) {
+  try {
+    const url = sdk()?.avatar?.getSkinTextureUrlFor?.(equipped)
     return typeof url === 'string' && url ? url : null
   } catch {
     return null
@@ -379,5 +419,130 @@ export function requestFullscreen(on) {
     else SDK.portal.exitFullscreen()
   } catch {
     // Ignore.
+  }
+}
+
+// --- Platform features (docs.bloxity.io) --------------------------------------------------------
+// Everything Boxity draws itself (emote picker, trophy button, chat, ads); the game opts in right
+// after init and services the events. All of it is a no-op outside Boxity.
+function platformFeatures(SDK) {
+  const call = (name, fn) => {
+    try {
+      fn()
+    } catch (err) {
+      console.warn(`[bloxity] ${name} failed`, err)
+    }
+  }
+  // Emotes: the button only appears for games that register, as soon as init has run.
+  call('emotes', () => SDK.game.registerFeature?.('emotes'))
+  // Leaderboards: declaring them is what shows the trophy button (the server submits the scores).
+  call('leaderboards', () => SDK.leaderboard?.define?.(LEADERBOARDS))
+  // Overhead chat bubbles: subscribing is the opt-in; every message in the room, own included.
+  call('chat', () => {
+    const off = SDK.chat?.onMessage?.((m) => emit(chatListeners, m))
+    if (typeof off === 'function') unsubscribers.push(off)
+  })
+  // Ad breaks (REQUIRED): Boxity may start one at any time; main.js pauses + mutes in between.
+  call('ads', () => {
+    const a = SDK.ads
+    if (!a) return
+    const on = a.onBreakStart?.((e) => emit(adBreakListeners, true, e))
+    const off = a.onBreakEnd?.((e) => emit(adBreakListeners, false, e))
+    for (const u of [on, off]) if (typeof u === 'function') unsubscribers.push(u)
+    // Screen ads: banners around the full-screen panels (Shop, Pets, Index, Sell...); gameplay is
+    // declared (required) but stays without banners (the developer's choice).
+    a.declareScreens?.({ panel: {}, gameplay: {} })
+  })
+}
+
+// fn(emoteId) when the player picks an emote in Boxity's wheel; fn(null) when they take it off.
+export function onEmote(fn) {
+  emoteListeners.add(fn)
+  return () => emoteListeners.delete(fn)
+}
+// fn({ userId, username, text, isGif, at, isLocalPlayer }) for every chat message in the room.
+export function onChat(fn) {
+  chatListeners.add(fn)
+  return () => chatListeners.delete(fn)
+}
+// fn(true) when an ad break starts, fn(false) when it is over.
+export function onAdBreak(fn) {
+  adBreakListeners.add(fn)
+  return () => adBreakListeners.delete(fn)
+}
+
+// The environment Boxity told the SDK ({ env, apiUrl, playUrl, portalUrl, staticUrl }), or null.
+export function environment() {
+  try {
+    return sdk()?.environment?.() ?? null
+  } catch {
+    return null
+  }
+}
+
+// The signed-in player's Boxity token, for the game server to verify (never decoded here).
+export function getToken() {
+  try {
+    const t = sdk()?.auth?.getToken?.()
+    return typeof t === 'string' && t ? t : null
+  } catch {
+    return null
+  }
+}
+
+// A chat bubble above `target` (the SDK's own three.js bubble: camera-facing, replaced by the
+// player's next message, gone after bubbleSeconds). THREE is the game's own three.js.
+export function chatBubble(THREE, target, message, opts) {
+  try {
+    const chat = sdk()?.chat
+    if (!chat?.attachBubble || !target) return null
+    return chat.attachBubble(THREE, target, chat.bubbleText ? chat.bubbleText(message) : String(message?.text ?? ''), opts)
+  } catch {
+    return null
+  }
+}
+
+// --- Ads --------------------------------------------------------------------------------------
+export function adsAvailable() {
+  try {
+    return !!sdk()?.ads?.isAvailable?.()
+  } catch {
+    return false
+  }
+}
+// { status, reason?, rewardToken?, test? }; 'completed' is the only status that grants anything.
+export async function showRewarded(placement) {
+  try {
+    return (await sdk()?.ads?.showRewarded?.(placement)) ?? { status: 'disabled' }
+  } catch {
+    return { status: 'error' }
+  }
+}
+// Screen ads: 'panel' while a full-screen window is open, 'gameplay' otherwise.
+let lastScreen = ''
+export function adScreen(type) {
+  if (type === lastScreen) return
+  lastScreen = type
+  try {
+    sdk()?.ads?.screen?.(type)
+  } catch {
+    // Non-fatal.
+  }
+}
+
+// --- Friend-join toasts ------------------------------------------------------------------------
+// "X joined you" (a friend arrived in this room) / "you joined X's lobby" (already here).
+export function playerJoined(name) {
+  try {
+    if (name) sdk()?.game?.playerJoined?.(name)
+  } catch {
+    // Non-fatal.
+  }
+}
+export function playerInRoom(name) {
+  try {
+    if (name) sdk()?.game?.playerInRoom?.(name)
+  } catch {
+    // Non-fatal.
   }
 }
