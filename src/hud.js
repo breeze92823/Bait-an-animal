@@ -8,7 +8,7 @@ import { clock, minsSecs, money, num } from './format.js'
 import { baitName, kindOf, levelOf } from './bait.js'
 import { burst, centre } from './juice.js'
 import { replay } from './uiWindow.js'
-import { isMuted, toggleMuted } from './audio/index.js'
+import { isMuted, isMusicOn, toggleMuted, toggleMusic } from './audio/index.js'
 
 // The on-screen HUD:
 //  - left column: Store (sale badge), Pets, Index (new-discovery badge)
@@ -47,6 +47,7 @@ export function createHud(game, open) {
       <button type="button" class="hud-pass xp" data-pass="x2xp"><span class="pass-top">PERMANENT</span><span class="pass-name">x2 XP</span><span class="pass-price"></span></button>
       <button type="button" class="hud-pass ad" hidden><span class="pass-top">WATCH AD</span><span class="pass-name">x2 Cash</span><span class="pass-price"></span></button>
     </div>
+    <button type="button" class="hud-music" aria-label="Music"></button>
     <button type="button" class="hud-sound" aria-label="Sound"></button>
     <div class="hud-bottom-left">
       <div class="hud-potions"></div>
@@ -111,6 +112,17 @@ export function createHud(game, open) {
   sound.addEventListener('click', () => {
     toggleMuted()
     paintSound()
+  })
+  const music = $('.hud-music')
+  const paintMusic = () => {
+    music.innerHTML = isMusicOn() ? ICONS.musicOn : ICONS.musicOff
+    music.setAttribute('aria-pressed', String(isMusicOn()))
+    music.title = isMusicOn() ? 'Music: on' : 'Music: off'
+  }
+  paintMusic()
+  music.addEventListener('click', () => {
+    toggleMusic()
+    paintMusic()
   })
 
   // Bait bag: one slot per carried bait.

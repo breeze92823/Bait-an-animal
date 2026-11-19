@@ -677,7 +677,10 @@ export const AUDIO = {
   volume: 0.8,
   storageKey: 'bait-an-animal.sound',
   buses: { ui: 0.8, sfx: 0.9, amb: 0.55, engine: 0.5 }, // per-bus levels before the master
-  duck: 0.45, // world (ambience) level while a menu window is open
+  duck: 0.45, // world (ambience + music) level while a menu window is open
+  // Background music (audio/music.js): file under public/, level on the world bus (sfx 0.9,
+  // ambience 0.55: it sits under both), fade-in s, its own on/off key (the HUD music button).
+  music: { src: 'audio/Background.mp3', volume: 0.3, fadeIn: 2.5, storageKey: 'bait-an-animal.music' },
   maxVoices: 48, // one-shot sounds at once before low-priority ones are skipped
   maxVoicesTouch: 24,
   latency: 0.04,
