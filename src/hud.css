@@ -264,7 +264,7 @@
 .hud-right {
   position: absolute;
   right: calc(var(--sr) + 14 * var(--u));
-  top: calc(50% - 40 * var(--u));
+  top: calc(50% - 90 * var(--u));
   display: flex;
   flex-direction: column;
   gap: calc(30 * var(--u));
@@ -659,51 +659,383 @@
 .touch-ui .hud-offer {
   top: calc(var(--st) + 124px);
 }
-@media (orientation: portrait) {
-  .touch-ui .hud-bag {
-    bottom: calc(var(--sb) + clamp(222px, 52vmin, 270px));
-  }
-  /* Passes up under the offer, clear of the prompt that docks above the bait bag. */
-  .hud-right {
-    top: calc(var(--st) + 300px);
-  }
+
+/* --- Phone layouts (hud.js arrange(): .compact + .port / .land) ---------------------------
+   Standard mobile-game zones: currencies + buffs top-left (under Boxity's toolbar + chat),
+   menu buttons on the left edge, one compact rail of offers/passes on the right edge,
+   joystick + jump cluster in the bottom corners, the bait bag bottom centre, and the middle
+   of the screen left clear. Lengths are design px x --c (1px on a 375 px wide phone). */
+.hud.compact {
+  --c: clamp(1px, calc(100vmin / 375), 1.35px);
+  /* Mirrors touch.css: the corner padding and the jump cluster's size. */
+  --pad: clamp(12px, 3vmin, 24px);
+  --ctl: calc(clamp(72px, 20vmin, 100px) + clamp(52px, 14vmin, 70px) + 12px + var(--pad));
+  /* Top of the sound / day / respawn row: under Boxity's toolbar where it spans the width. */
+  --tr-top: max(calc(var(--st) + var(--pad)), calc(var(--bx-tr, 0px) + 8px));
+  --rail-top: calc(var(--tr-top) + 54px);
+  --bag-bottom: calc(var(--sb) + 10px);
 }
-/* Short landscape screens (phones on their side): Boxity's toolbar + chat fill the top-left
-   200 px, so Store / Pets / Index go in a row beside the toolbar, the free pet under them,
-   and the offer + passes move up the right edge. */
-@media (orientation: landscape) and (max-height: 500px) {
-  .hud-left {
-    flex-direction: row;
-    top: calc(var(--st) + 8px);
-    left: calc(var(--toolbar-right, 330px) + 14px);
-    gap: 12px;
-  }
-  .hud-btn {
-    width: 54px;
-    height: 54px;
-  }
-  .hud-label {
-    font-size: 12px;
-  }
-  .hud-free {
-    top: calc(var(--st) + 72px);
-    left: calc(var(--toolbar-right, 330px) + 4px);
-  }
-  .hud-offer {
-    top: calc(var(--st) + 4px);
-    right: calc(var(--sr) + 66px);
-  }
-  .touch-ui .hud-offer {
-    top: calc(var(--st) + 4px);
-    right: calc(var(--sr) + 128px);
-  }
-  .touch-ui .hud-sound {
-    top: calc(var(--st) + 66px);
-  }
-  .hud-right {
-    top: calc(var(--st) + 150px);
-    gap: 22px;
-  }
+.touch-ui .hud.port {
+  /* Sound sits under the touch day/respawn row, the rail under that. */
+  --rail-top: calc(var(--tr-top) + 106px);
+  --bag-bottom: calc(var(--sb) + var(--ctl) + 8px);
+}
+
+/* Top right: sound. */
+.hud.compact .hud-sound {
+  top: var(--tr-top);
+  right: calc(var(--sr) + var(--pad));
+  width: 44px;
+  height: 44px;
+}
+.touch-ui .hud.port .hud-sound {
+  top: calc(var(--tr-top) + 52px);
+}
+.touch-ui .hud.land .hud-sound {
+  right: calc(var(--sr) + var(--pad) + 108px);
+}
+
+/* Left column (portrait): currencies, then the menu buttons. */
+.hud-lcol {
+  display: none;
+}
+.hud.port .hud-lcol {
+  position: absolute;
+  left: calc(var(--sl) + 10px);
+  top: max(calc(var(--st) + 8px), calc(var(--reserved, 0px) + 8px));
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: calc(16 * var(--c));
+}
+.hud.port .hud-lcol > * {
+  position: static;
+}
+
+/* Currencies + buffs. Portrait: money / strength on one line, rate, boost, potions under it.
+   Short landscape: under Boxity's chat, boost beside the rate. */
+.hud.compact .hud-bottom-left {
+  display: grid;
+  grid-template-columns: auto auto;
+  grid-template-areas:
+    'money str'
+    'rate rate'
+    'boost boost'
+    'pot pot';
+  justify-content: start;
+  justify-items: start;
+  align-items: center;
+  column-gap: calc(14 * var(--c));
+  row-gap: calc(4 * var(--c));
+}
+.hud.land .hud-bottom-left {
+  left: calc(var(--sl) + 10px);
+  top: max(calc(var(--st) + 8px), calc(var(--reserved, 0px) + 8px));
+  bottom: auto;
+  grid-template-areas:
+    'money str'
+    'rate boost'
+    'pot pot';
+}
+.hud.compact .hud-money {
+  grid-area: money;
+  gap: calc(6 * var(--c));
+}
+.hud.compact .hud-str {
+  grid-area: str;
+  gap: calc(4 * var(--c));
+}
+.hud.compact .hud-rate {
+  grid-area: rate;
+  margin-left: calc(34 * var(--c));
+  font-size: calc(12 * var(--c));
+  --ow: 3px;
+}
+.hud.compact .hud-potions {
+  grid-area: pot;
+  gap: calc(5 * var(--c));
+}
+.hud.compact .money-ico {
+  width: calc(28 * var(--c));
+  height: calc(28 * var(--c));
+}
+.hud.compact .money-num {
+  font-size: calc(25 * var(--c));
+  --ow: calc(5 * var(--c));
+}
+.hud.compact .str-ico {
+  width: calc(24 * var(--c));
+  height: calc(24 * var(--c));
+  margin-left: 0;
+}
+.hud.compact .str-num {
+  font-size: calc(21 * var(--c));
+  --ow: calc(4.5 * var(--c));
+}
+.hud.compact .hud-boost {
+  grid-area: boost;
+  position: static;
+  flex-direction: row;
+  align-items: center;
+  gap: calc(6 * var(--c));
+}
+.hud.compact .boost-title {
+  font-size: calc(12 * var(--c));
+  --ow: 3px;
+}
+.hud.compact .boost-next {
+  gap: calc(3 * var(--c));
+}
+.hud.compact .boost-ico {
+  width: calc(15 * var(--c));
+  height: calc(15 * var(--c));
+}
+.hud.compact .boost-time {
+  font-size: calc(12 * var(--c));
+  --ow: 3px;
+}
+.hud.compact .chip {
+  gap: calc(3 * var(--c));
+  padding: calc(2 * var(--c)) calc(7 * var(--c)) calc(2 * var(--c)) calc(2 * var(--c));
+  border-width: 1.5px;
+}
+.hud.compact .chip svg {
+  width: calc(18 * var(--c));
+  height: calc(18 * var(--c));
+}
+.hud.compact .chip b {
+  font-size: calc(11 * var(--c));
+  --ow: 2.5px;
+}
+.hud.compact .chip i {
+  font-size: calc(10 * var(--c));
+  --ow: 2.5px;
+}
+
+/* Menu buttons: a column in portrait, a row beside Boxity's toolbar in short landscape. */
+.hud.compact .hud-left {
+  gap: calc(14 * var(--c));
+}
+.hud.land .hud-left {
+  flex-direction: row;
+  top: max(calc(var(--st) + 8px), 8px);
+  left: calc(var(--toolbar-right, 330px) + 12px);
+  gap: calc(9 * var(--c));
+}
+.hud.compact .hud-btn {
+  width: max(44px, calc(50 * var(--c)));
+  height: max(44px, calc(50 * var(--c)));
+  border-width: 3px;
+  border-radius: calc(12 * var(--c));
+  box-shadow:
+    inset 0 -4px 0 rgba(0, 0, 0, 0.18),
+    inset 0 3px 0 rgba(255, 255, 255, 0.35),
+    0 2px 0 rgba(0, 0, 0, 0.25);
+}
+.hud.land .hud-btn {
+  width: max(44px, calc(44 * var(--c)));
+  height: max(44px, calc(44 * var(--c)));
+  border-radius: calc(10 * var(--c));
+}
+.hud.compact .hud-label {
+  bottom: 5%;
+  font-size: calc(11 * var(--c));
+  --ow: 3px;
+}
+.hud.land .hud-label {
+  font-size: calc(10 * var(--c));
+}
+.hud.compact .hud-badge {
+  font-size: calc(10 * var(--c));
+  --ow: 2.5px;
+}
+.hud.compact .hud-badge.sale {
+  right: calc(-14 * var(--c));
+  top: calc(-9 * var(--c));
+  padding: calc(3 * var(--c)) calc(5 * var(--c));
+  border-width: 2px;
+}
+.hud.compact .hud-badge.alert {
+  right: calc(-6 * var(--c));
+  top: calc(-6 * var(--c));
+  width: calc(18 * var(--c));
+  height: calc(18 * var(--c));
+  border-width: 2px;
+}
+
+/* Right rail: free pet, OP offer, passes, ad. One column in portrait; in short landscape two
+   rows that grow leftwards, so it ends above the jump cluster. */
+.hud.compact .hud-right {
+  top: var(--rail-top);
+  right: calc(var(--sr) + 6px);
+  display: grid;
+  gap: calc(18 * var(--c)) calc(8 * var(--c));
+  justify-items: center;
+  align-items: start;
+}
+.hud.land .hud-right {
+  grid-auto-flow: column;
+  grid-template-rows: repeat(2, auto);
+  direction: rtl;
+}
+.hud.land .hud-right > * {
+  direction: ltr;
+}
+.hud.compact .hud-free,
+.hud.compact .hud-offer {
+  position: relative;
+  left: auto;
+  right: auto;
+  top: auto;
+  width: calc(78 * var(--c));
+  min-width: 0;
+}
+.hud.compact .hud-free img,
+.hud.compact .hud-offer img {
+  width: calc(50 * var(--c));
+  height: calc(50 * var(--c));
+  min-width: 0;
+  min-height: 0;
+}
+/* Short landscape: the rail's two rows must end above the jump cluster. */
+.hud.land .hud-right {
+  row-gap: calc(10 * var(--c));
+}
+.hud.land .hud-free,
+.hud.land .hud-offer {
+  width: calc(66 * var(--c));
+}
+.hud.land .hud-free img,
+.hud.land .hud-offer img {
+  width: calc(40 * var(--c));
+  height: calc(40 * var(--c));
+}
+.hud.compact .free-top {
+  font-size: calc(10 * var(--c));
+  --ow: 2.5px;
+}
+.hud.compact .free-word {
+  margin-top: calc(-8 * var(--c));
+  font-size: calc(18 * var(--c));
+  --ow: 4px;
+}
+.hud.compact .offer-price {
+  font-size: calc(12 * var(--c));
+  --ow: 3px;
+}
+.hud.compact .offer-op {
+  margin-top: calc(-16 * var(--c));
+  font-size: calc(26 * var(--c));
+  filter: drop-shadow(1.5px 1.5px 0 var(--ink)) drop-shadow(-1.5px -1.5px 0 var(--ink)) drop-shadow(1.5px -1.5px 0 var(--ink)) drop-shadow(-1.5px 1.5px 0 var(--ink));
+}
+.hud.compact .offer-time {
+  font-size: calc(13 * var(--c));
+  --ow: 3px;
+}
+.hud.land .offer-op {
+  margin-top: calc(-14 * var(--c));
+  font-size: calc(22 * var(--c));
+}
+.hud.land .offer-price,
+.hud.land .offer-time {
+  font-size: calc(11 * var(--c));
+}
+.hud.compact .hud-pass {
+  width: calc(78 * var(--c));
+  min-width: 0;
+  height: calc(38 * var(--c));
+  min-height: 0;
+  margin-bottom: calc(8 * var(--c));
+  border-width: 2.5px;
+  border-radius: calc(9 * var(--c));
+  box-shadow:
+    inset 0 -3px 0 rgba(0, 0, 0, 0.15),
+    inset 0 2px 0 rgba(255, 255, 255, 0.35);
+}
+/* "PERMANENT" is noise at this size; "WATCH AD" stays. */
+.hud.compact .hud-pass:not(.ad) .pass-top {
+  display: none;
+}
+.hud.compact .hud-pass.ad {
+  margin-top: calc(6 * var(--c));
+}
+.hud.compact .pass-top {
+  top: calc(-10 * var(--c));
+  font-size: calc(10 * var(--c));
+  white-space: nowrap;
+  --ow: 2.5px;
+}
+.hud.compact .pass-name {
+  font-size: calc(17 * var(--c));
+  white-space: nowrap;
+  --ow: 3.5px;
+}
+.hud.compact .pass-price {
+  bottom: calc(-11 * var(--c));
+  padding: calc(2 * var(--c)) calc(7 * var(--c));
+  border-width: 2px;
+  font-size: calc(11 * var(--c));
+  white-space: nowrap;
+  --ow: 2.5px;
+}
+
+/* Bait bag: bottom centre; in touch portrait above the joystick + jump cluster, in short
+   landscape between them. */
+.hud.compact .hud-bag {
+  bottom: var(--bag-bottom);
+  gap: calc(6 * var(--c));
+}
+.hud.compact .bag-slot {
+  width: max(44px, calc(46 * var(--c)));
+  height: max(44px, calc(46 * var(--c)));
+  border-radius: calc(11 * var(--c));
+  border-width: 2px !important;
+}
+.hud.compact .bag-slot.sel {
+  transform: translateY(-4px);
+}
+.hud.compact .bag-key {
+  left: 4px;
+  top: 3px;
+  font-size: 10px;
+  --ow: 2.5px;
+}
+.hud.compact .bag-lv {
+  bottom: 2px;
+  font-size: 10px;
+  --ow: 2.5px;
+}
+.hud.compact .bag-empty {
+  font-size: calc(12 * var(--c));
+}
+
+/* Toasts + catch banner: smaller, wrap instead of running off a narrow screen. */
+.hud.compact .hud-toast {
+  top: max(calc(var(--st) + 12%), calc(var(--tr-top) + 56px));
+  width: max-content;
+  white-space: normal;
+  font-size: calc(17 * var(--c));
+  --ow: 4px;
+}
+.hud.land .hud-toast {
+  top: calc(var(--tr-top) + 60px);
+}
+/* The tutorial banner (tutorial.css) owns the top while it is up. */
+body.tut-on .hud.compact .hud-toast {
+  top: calc(var(--st) + max(12%, 120px));
+}
+.hud.compact .banner-rarity {
+  font-size: calc(18 * var(--c));
+  --ow: 4px;
+}
+.hud.compact .banner-name {
+  font-size: calc(32 * var(--c));
+  --ow: 6px;
+}
+.hud.compact .banner-new {
+  font-size: calc(13 * var(--c));
+  border-width: 2px;
+  --ow: 3px;
 }
 /* Windows open on touch: the HUD steps back. */
 .touch-ui.uiw-open .hud {
@@ -814,32 +1146,38 @@
 .hud-cancel:active {
   transform: translateX(-50%) scale(0.95);
 }
-/* Portrait: the bar sits above the strength + money stack (bottom left), which on touch is
-   itself lifted above the joystick. */
-@media (orientation: portrait) {
-  .hud-train {
-    bottom: calc(var(--sb) + 150px);
-  }
-  .touch-ui .hud-train {
-    bottom: calc(var(--sb) + clamp(280px, 62vmin, 330px));
-    left: auto;
-    right: calc(var(--sr) + 12px);
-    transform: none;
-    width: calc(100% - var(--sl) - var(--sr) - 96px);
-    min-width: 0;
-  }
+/* Phones: the bar takes the bait bag's place (bottom centre; touch portrait above the
+   controls, short landscape between them) and Cancel sits right above it, by the thumbs. */
+.hud.compact .hud-train {
+  bottom: var(--bag-bottom);
+  width: min(calc(100% - var(--sl) - var(--sr) - 24px), 460px);
+  min-width: 0;
 }
-/* Short landscape: Cancel clears the Store/Pets/Index row beside the toolbar; the bar stays
-   between the joystick and the jump cluster. */
-@media (orientation: landscape) and (max-height: 500px) {
-  .hud-train {
-    width: min(calc(100% - 340px), 520px);
-    min-width: 0;
-  }
-  .hud-cancel {
-    top: calc(var(--st) + 74px);
-    min-height: 44px;
-  }
+.touch-ui .hud.land .hud-train {
+  width: min(calc(100% - var(--sl) - var(--sr) - 2 * var(--ctl) - 16px), 460px);
+}
+.hud.compact .train-str,
+.hud.compact .train-lv {
+  font-size: calc(17 * var(--c));
+  --ow: 4px;
+}
+.hud.compact .train-bar {
+  height: calc(28 * var(--c));
+  border-width: 3px;
+}
+.hud.compact .train-xp {
+  font-size: calc(15 * var(--c));
+  --ow: 3.5px;
+}
+.hud.compact .hud-cancel {
+  top: auto;
+  bottom: calc(var(--bag-bottom) + 66 * var(--c));
+  min-width: 112px;
+  min-height: 44px;
+  padding: 4px 24px !important;
+  font-size: calc(20 * var(--c));
+  border-width: 3px;
+  --ow: 4px;
 }
 
 /* Strength popups: "+1.2" with a flexed arm. */

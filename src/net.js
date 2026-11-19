@@ -5,11 +5,11 @@
 // never overwrite it). From then on every game.save() goes to the server as `saveProgress`
 // { save: S } when it changed, at most every NET.saveEvery s, and right away when the tab hides
 // or closes. The server bounds the save (backend src/baitSave.ts).
-// Guests (not signed in to Bloxity), and everyone when no server is configured, keep their
-// progress in this browser (localStorage, SAVE.key) as before. A guest who signs in to a NEW
-// account brings that progress along; an account with a save loads it instead. Signing out goes
-// back to the browser's guest save.
-// Never throws and never blocks play: without a server the game runs on the browser save.
+// Progress is NEVER saved in this browser: guests (not signed in to Bloxity), and everyone when no
+// server is configured, play without saving (their progress lasts the page). A guest who signs in
+// to a NEW account brings that in-memory progress along; an account with a save loads it instead.
+// Signing out starts a fresh guest game.
+// Never throws and never blocks play: without a server the game just runs unsaved.
 //
 // Presence (one room = one hub of five plots, one player each; the server assigns `plot`):
 // tickPresence() streams this player's character (`move`, ~10/s), Bloxity look (`look`: outfit key
@@ -17,7 +17,7 @@
 // into the room's roster; presence.js sendFx() events go out as `fx`, and the others' come back
 // through onFx(). remote.js reads the roster (net.room.state.players) and draws everyone else.
 import { Client } from '@colyseus/sdk'
-import { DEV_MODE, NET, SAVE, SERVER_URL } from './config.js'
+import { DEV_MODE, NET, SERVER_URL } from './config.js'
 import { authState, canResolveServer, getEquippedAvatar, getOutfitKey, getPfp, getProportions, getToken, launchRoomId, locateRoom, resolveServerEndpoint, subscribeAuth, updateRoom } from './bloxity.js'
 import { setFxSender } from './presence.js'
 
@@ -49,26 +49,6 @@ function identity() {
 const isGuestId = (id) => id.startsWith('guest-')
 
 export const hasServer = () => !!(SERVER_URL || canResolveServer())
-// The server only saves players whose Boxity token it verified: without one (guests, dev mode
-// without the SDK) progress stays in this browser.
-const keepsLocal = () => !hasServer() || isGuestId(identity().userId) || !getToken()
-
-// --- Browser save ------------------------------------------------------------------
-function localLoad() {
-  try {
-    return JSON.parse(localStorage.getItem(SAVE.key) || 'null')
-  } catch {
-    return null
-  }
-}
-function localSave(state) {
-  try {
-    localStorage.setItem(SAVE.key, JSON.stringify(state))
-  } catch {
-    // Private mode / storage full: this session's progress lasts the page.
-  }
-}
-
 // --- Saving -----------------------------------------------------------------------
 let game = null
 let lastSent = ''
@@ -95,12 +75,11 @@ function serverSave(force = false) {
   send('saveProgress', { save: JSON.parse(snap) })
 }
 
-// game.save() lands here: the browser for guests / no server, the server for signed-in players
-// (nothing until auth has settled, since who is playing decides where).
+// game.save() lands here: only the server stores progress (and only for signed-in players: it
+// ignores guests). Nothing is sent until auth has settled.
 function persist(state, force = false) {
   if (hasServer() && !authState.ready) return
-  if (keepsLocal()) localSave(state)
-  else serverSave(force)
+  serverSave(force)
 }
 const flush = () => game && persist(game.S, true)
 
@@ -298,7 +277,7 @@ async function connect() {
     attach(room)
     updateRoom(relay ? `${relay}~${room.roomId}` : room.roomId)
   } catch (err) {
-    console.info(`[net] could not reach the server (retrying in ${retryIn}s); playing on the browser save`, err?.message ?? err)
+    console.info(`[net] could not reach the server (retrying in ${retryIn}s); playing unsaved`, err?.message ?? err)
     setTimeout(connect, retryIn * 1000)
     retryIn = Math.min(retryIn * 2, NET.retryMax)
   } finally {
@@ -312,24 +291,24 @@ export function initNet(g) {
   game.setPersist((state) => persist(state))
   window.addEventListener('pagehide', flush)
   document.addEventListener('visibilitychange', () => document.hidden && flush())
-  if (!hasServer()) return console.info('[net] no server configured; progress is kept in this browser')
+  if (!hasServer()) return console.info('[net] no server configured; progress is not saved')
   subscribeAuth((s) => {
     if (!s.ready) return
     if (!net.connected) return void connect()
     const id = identity()
     if (id.userId === sentId) return send('identify', { username: id.username, pfp: getPfp() })
-    // Save under the OLD identity before switching (auth has already moved on).
-    if (isGuestId(sentId)) localSave(game.S)
-    else if (net.hydrated) {
+    // Save under the OLD identity before switching (auth has already moved on). A guest has
+    // nothing stored: its in-memory progress goes along to a NEW account (`noProgress`).
+    if (!isGuestId(sentId) && net.hydrated) {
       lastSent = ''
       sentAt = 0
       const snap = JSON.stringify(game.S)
       send('saveProgress', { save: JSON.parse(snap) })
     }
     net.hydrated = false
-    // Signed out: back to this browser's guest save (the account's progress stays on the server).
+    // Signed out: a fresh guest game (the account's progress stays on the server).
     if (isGuestId(id.userId)) {
-      game.hydrate(localLoad())
+      game.hydrate(null)
       loadedId = ''
     }
     sentId = id.userId

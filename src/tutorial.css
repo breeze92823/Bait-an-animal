@@ -1,0 +1,259 @@
+/* The new-player tutorial (tutorial.js): banner at the top of the HUD, the screen-edge arrow
+   toward an off-screen target, and the pointer over the button to press. Over the HUD (20) and
+   the bait flow (22), under windows (100). Sizes scale with --u like the HUD. */
+.tut {
+  --ink: #1d1a22;
+  --u: clamp(0.55px, calc(min(100vw, 177.78vh) / 1600), 1.3px);
+  --st: env(safe-area-inset-top, 0px);
+  position: fixed;
+  inset: 0;
+  z-index: 23;
+  pointer-events: none;
+  font-family: 'Fredoka', system-ui, sans-serif;
+  font-weight: 700;
+  line-height: 1.1;
+  color: #fff;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.tut [hidden] {
+  display: none !important;
+}
+
+/* --- Banner -------------------------------------------------------------------------------- */
+.tut-banner {
+  position: absolute;
+  left: 50%;
+  top: calc(var(--st) + max(8px, 1.6%));
+  width: min(calc(620 * var(--u)), calc(100vw - 24px));
+  min-width: min(300px, calc(100vw - 24px));
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: calc(14 * var(--u));
+  padding: calc(10 * var(--u)) calc(12 * var(--u)) calc(10 * var(--u)) calc(10 * var(--u));
+  border: max(3px, calc(4 * var(--u))) solid var(--ink);
+  border-radius: calc(18 * var(--u));
+  background: linear-gradient(180deg, rgba(40, 44, 66, 0.94), rgba(22, 24, 38, 0.94));
+  box-shadow: 0 0 0 max(2px, calc(3 * var(--u))) #ffd21f, 0 calc(8 * var(--u)) calc(22 * var(--u)) rgba(0, 0, 0, 0.4);
+  transform: translateX(-50%);
+}
+.tut-banner.pop {
+  animation: tut-pop 0.45s cubic-bezier(0.2, 1.5, 0.4, 1);
+}
+@keyframes tut-pop {
+  0% {
+    transform: translateX(-50%) scale(0.75);
+    opacity: 0;
+  }
+  100% {
+    transform: translateX(-50%) scale(1);
+    opacity: 1;
+  }
+}
+/* On the harpoon: out of the meter / reel bar's way, at the left side. */
+.tut-banner.side {
+  left: max(10px, 2%);
+  top: 50%;
+  width: min(calc(360 * var(--u)), 42vw);
+  min-width: 0;
+  transform: translateY(-50%);
+}
+.tut-banner.side.pop {
+  animation: none;
+}
+.tut-num {
+  flex: none;
+  display: grid;
+  place-items: center;
+  min-width: max(36px, calc(54 * var(--u)));
+  height: max(36px, calc(54 * var(--u)));
+  padding: 0 calc(6 * var(--u));
+  box-sizing: border-box;
+  border-radius: 999px;
+  background: #ffd21f;
+  border: max(2px, calc(3 * var(--u))) solid var(--ink);
+  color: var(--ink);
+  font-size: max(13px, calc(20 * var(--u)));
+}
+.tut-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: calc(5 * var(--u));
+}
+.tut-title {
+  font-size: max(16px, calc(28 * var(--u)));
+  color: #ffd21f;
+  -webkit-text-stroke: max(3px, calc(5 * var(--u))) var(--ink);
+  paint-order: stroke fill;
+}
+.tut-text {
+  font-size: max(12px, calc(18 * var(--u)));
+  font-weight: 600;
+  color: #f2f4ff;
+}
+.tut-bar {
+  position: relative;
+  height: max(16px, calc(22 * var(--u)));
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.45);
+  border: max(2px, calc(3 * var(--u))) solid var(--ink);
+  overflow: hidden;
+}
+.tut-bar i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 0;
+  background: linear-gradient(180deg, #8dff6a, #3fc22a);
+  transition: width 0.25s ease-out;
+}
+.tut-bar span {
+  position: relative;
+  display: block;
+  text-align: center;
+  font-size: max(11px, calc(15 * var(--u)));
+  line-height: max(12px, calc(17 * var(--u)));
+  -webkit-text-stroke: max(2px, calc(4 * var(--u))) var(--ink);
+  paint-order: stroke fill;
+}
+.tut-skip {
+  flex: none;
+  align-self: flex-start;
+  pointer-events: auto;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 calc(14 * var(--u));
+  border: max(2px, calc(3 * var(--u))) solid var(--ink);
+  border-radius: calc(12 * var(--u));
+  background: #5b6075;
+  box-shadow: inset 0 calc(-4 * var(--u)) 0 rgba(0, 0, 0, 0.3);
+  font: inherit;
+  font-size: max(12px, calc(17 * var(--u)));
+  color: #fff;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+.tut-skip.armed {
+  background: #e8463f;
+}
+.tut-skip:active {
+  transform: translateY(2px);
+}
+.tut-banner.side .tut-skip {
+  display: none;
+}
+
+/* While the banner is up the HUD's toast and catch banner sit below it. */
+body.tut-on .hud-toast {
+  top: calc(var(--st) + max(12%, 120px));
+}
+body.tut-on .hud-banner {
+  top: calc(var(--st) + max(19%, 160px));
+}
+
+/* --- Screen-edge arrow toward an off-screen target --------------------------------------------- */
+.tut-edge {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+}
+.tut-edge svg {
+  position: absolute;
+  width: max(40px, calc(64 * var(--u)));
+  height: max(34px, calc(54 * var(--u)));
+  left: calc(max(40px, calc(64 * var(--u))) / -2);
+  top: calc(max(34px, calc(54 * var(--u))) / -2);
+  filter: drop-shadow(0 0 6px rgba(255, 210, 31, 0.8));
+  animation: tut-pulse 0.7s ease-in-out infinite alternate;
+}
+.tut-edge span {
+  position: absolute;
+  left: 0;
+  top: max(24px, calc(38 * var(--u)));
+  transform: translateX(-50%);
+  white-space: nowrap;
+  font-size: max(12px, calc(17 * var(--u)));
+  color: #ffd21f;
+  -webkit-text-stroke: max(3px, calc(5 * var(--u))) var(--ink);
+  paint-order: stroke fill;
+}
+@keyframes tut-pulse {
+  from {
+    scale: 0.88;
+  }
+  to {
+    scale: 1.08;
+  }
+}
+
+/* --- Pointer over the button to press ------------------------------------------------------------ */
+.tut-point {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+}
+.tut-point svg {
+  position: absolute;
+  width: max(34px, calc(52 * var(--u)));
+  height: max(41px, calc(62 * var(--u)));
+  left: calc(max(34px, calc(52 * var(--u))) / -2);
+  bottom: 0;
+  filter: drop-shadow(0 0 6px rgba(255, 210, 31, 0.8));
+  animation: tut-bob 0.45s ease-in-out infinite alternate;
+}
+@keyframes tut-bob {
+  from {
+    translate: 0 calc(-14 * var(--u));
+  }
+  to {
+    translate: 0 0;
+  }
+}
+
+/* Phones in portrait: the banner hugs the left edge, clear of the sound / touch buttons in the
+   top-right corner, and Skip becomes a round chip on its corner. */
+@media (max-width: 640px) {
+  .tut-banner:not(.side) {
+    left: calc(env(safe-area-inset-left, 0px) + 10px);
+    right: calc(env(safe-area-inset-right, 0px) + 76px);
+    width: auto;
+    min-width: 0;
+    transform: none;
+    padding-right: calc(10px + 6 * var(--u));
+  }
+  body.touch-ui .tut-banner:not(.side) {
+    right: calc(env(safe-area-inset-right, 0px) + 128px);
+  }
+  .tut-banner.pop:not(.side) {
+    animation-name: tut-pop-left;
+  }
+  .tut-skip {
+    position: absolute;
+    top: -14px;
+    right: -16px;
+    padding: 0 8px;
+    border-radius: 999px;
+    font-size: 12px;
+  }
+  .tut-banner.side {
+    top: 30%;
+    width: 46vw;
+  }
+}
+@keyframes tut-pop-left {
+  0% {
+    transform: scale(0.75);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}

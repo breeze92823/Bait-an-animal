@@ -1,5 +1,5 @@
 import { Vector3 } from 'three'
-import { ANIMALS, ANIMAL_SELL_MULT, INDEX, NEXT_SHOT, ZONES, laneLength, zoneAt, AUDIO, BAITS, BASE, GYM, HARPOON, MACHINE, OFFER, OFFLINE, PASSES, PETS, PLAY_BOOST, RARITIES, SAVE, SHINY, SPAWN, START_MONEY, STORE, UPGRADES as U, PEN_SPAWN_GAP, penSouth } from './config.js'
+import { ANIMALS, ANIMAL_SELL_MULT, INDEX, NEXT_SHOT, ZONES, laneLength, zoneAt, AUDIO, BAITS, BASE, GYM, HARPOON, MACHINE, OFFER, OFFLINE, PASSES, PETS, PLAY_BOOST, RARITIES, SAVE, SHINY, SPAWN, START_MONEY, STORE, TUTORIAL, UPGRADES as U, PEN_SPAWN_GAP, penSouth } from './config.js'
 import { PenAnimal, animalDef, buildAnimal, rarityDef, setPenSouth } from './animals.js'
 import { sendFx } from './presence.js'
 import { baitName, buildBait, kindOf } from './bait.js'
@@ -13,7 +13,7 @@ import { player, resetPlayer } from './player.js'
 // runs the automation (Auto Click, Auto Machine), the bait regrowth, income
 // ticks (+$ popups and clinks over each animal), timers and the in-world displays.
 // The HUD plugs in through game.ui (toast, banner, open windows).
-// State persists to localStorage (SAVE.key).
+// State persists on the game server only (net.js), never in the browser.
 
 const T = BASE.pad.h + 0.02
 const MACHINE_AT = new Vector3(BASE.machine.x, T + 2.4, BASE.machine.z)
@@ -47,26 +47,32 @@ function defaults() {
     nextShot: false, // the Next Shot 100x Luck is bought and waiting for the next shot
     // The training ring: level = equipment level (upgrade pad), lv/xp = training level.
     gym: { owned: false, level: 1, strength: 0, lv: 1, xp: 0 },
+    tutorial: 0, // the new-player tutorial's step (tutorial.js); TUTORIAL.done = finished or skipped
   }
 }
 
-// The browser save, or `given` (a save from the game server, net.js) merged over the defaults.
+// `given` (a save from the game server, net.js) merged over the defaults. There is no browser
+// save: progress lives only on the server.
 function load(given) {
   const s = defaults()
   try {
-    const raw = given !== undefined ? given : JSON.parse(localStorage.getItem(SAVE.key) || 'null')
+    const raw = given
     if (raw && raw.v === 1) {
       for (const k of Object.keys(s)) {
         if (raw[k] === undefined) continue
         if (s[k] && typeof s[k] === 'object' && !Array.isArray(s[k])) s[k] = { ...s[k], ...raw[k] }
         else s[k] = raw[k]
       }
+      // A save from before the tutorial existed: a player who has already caught something
+      // knows the loop, so it never shows for them.
+      if (raw.tutorial === undefined && (raw.catches > 0 || raw.animals?.length || raw.passes?.autoMachine)) s.tutorial = TUTORIAL.done
     }
   } catch {
     // Corrupt or blocked storage: a fresh start.
   }
   s.baits = s.baits.filter((p) => Number.isFinite(p)).slice(0, BAITS.carryMax)
   if (!Array.isArray(s.auto) || s.auto.length !== 3) s.auto = defaults().auto
+  s.tutorial = Number.isFinite(s.tutorial) ? Math.max(0, Math.min(TUTORIAL.done, s.tutorial | 0)) : 0
   s.animals = s.animals.filter((a) => animalDef(a.species))
   // Saves from before the rebalance: bait stops at BAITS.maxLevel, upgrades at their (lower) max.
   const top = BAITS.maxLevel
@@ -97,6 +103,9 @@ export function createGame({ scene, base, harpoon, fx, camera }) {
   let uid = S.animals.reduce((m, a) => Math.max(m, a.uid ?? 0), 0) + 1
 
   const ui = { toast() {}, banner() {}, openSell() {}, gain() {}, train() {} } // replaced by the HUD / training
+  // Game events for listeners outside the rules (the tutorial): pump, claim, caught, bought.
+  const listeners = {}
+  const emit = (name, arg) => listeners[name]?.forEach((fn) => fn(arg))
 
   // --- Derived values ----------------------------------------------------------------------
   const now = () => Date.now()
@@ -301,6 +310,9 @@ export function createGame({ scene, base, harpoon, fx, camera }) {
     S,
     ui,
     animals,
+    on(name, fn) {
+      ;(listeners[name] ??= []).push(fn)
+    },
     get money() {
       return S.money
     },
@@ -410,6 +422,7 @@ export function createGame({ scene, base, harpoon, fx, camera }) {
         fx.ring({ x: BASE.machine.x, y: T, z: BASE.machine.z }, '#7dff6a', 5)
         fx.shimmer({ x: BASE.machine.x, y: T + 1, z: BASE.machine.z }, '#fff6a0', 26, 1.4, 5)
       }
+      emit('pump', auto)
     },
 
     claim(auto = false) {
@@ -436,6 +449,7 @@ export function createGame({ scene, base, harpoon, fx, camera }) {
       sendFx('claim')
       fx.sparkle(MACHINE_AT, BAITS.kinds[kindOf(S.machine.p)].color, 26, 4)
       fx.popup({ x: MACHINE_AT.x - 1.6, y: MACHINE_AT.y + 2, z: MACHINE_AT.z }, `+1 ${BAITS.kinds[kindOf(S.machine.p)].name}`, 'big')
+      emit('claim')
       return true
     },
 
@@ -575,6 +589,7 @@ export function createGame({ scene, base, harpoon, fx, camera }) {
       ui.banner(data, rar, first)
       spawnAnimal(record, { x: at.x, y: 0.5, z: at.z })
       save()
+      emit('caught', record)
       return r
     },
 
@@ -650,6 +665,7 @@ export function createGame({ scene, base, harpoon, fx, camera }) {
       }
       sfx.unlock()
       save()
+      emit('bought', id)
       return true
     },
 
@@ -1182,21 +1198,15 @@ export function createGame({ scene, base, harpoon, fx, camera }) {
   const harpoonSpot = { x: harpoon.root.position.x, y: 2.4, z: harpoon.root.position.z, r: 3.4 }
 
   let saving = true
-  // Where saves go: this browser by default; net.js (setPersist) routes them to the game server
-  // for signed-in players.
-  let persist = (state) => {
-    try {
-      localStorage.setItem(SAVE.key, JSON.stringify(state))
-    } catch {
-      // Storage full or blocked: keep playing unsaved.
-    }
-  }
+  // Where saves go: only the game server (net.js setPersist). Nothing is written in this browser.
+  let persist = () => {}
   function save() {
     if (!saving) return
     S.lastSeen = now()
     persist(S)
   }
   game.setPersist = (fn) => (persist = fn)
+  game.saveNow = save
   // Replaces the whole state with a loaded save (the server's copy, or the browser's after a
   // sign-out): the pen, followers, timers and offline cash are rebuilt from it. S keeps its
   // identity (windows and the HUD hold it).
@@ -1219,15 +1229,11 @@ export function createGame({ scene, base, harpoon, fx, camera }) {
   window.addEventListener('beforeunload', save)
   window.addEventListener('pagehide', save)
 
-  // Wipes the save and restarts (dev console: __game.game.resetSave()).
+  // Wipes the progress (dev console: __game.game.resetSave()): resets the state to a fresh start
+  // and pushes it to the server (a no-op when nothing is connected).
   game.resetSave = () => {
-    saving = false
-    try {
-      localStorage.removeItem(SAVE.key)
-    } catch {
-      // Storage blocked: nothing to wipe.
-    }
-    location.reload()
+    game.hydrate(null)
+    save()
   }
 
   // Every rarity's display, for windows.
