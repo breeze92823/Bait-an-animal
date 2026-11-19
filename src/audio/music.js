@@ -30,12 +30,24 @@ function create(ctx) {
   apply()
 }
 
+let waiting = false
+function retryOnGesture() {
+  if (waiting) return
+  waiting = true
+  const go = () => {
+    waiting = false
+    for (const type of ['pointerdown', 'keydown', 'touchend']) window.removeEventListener(type, go, true)
+    if (on && !document.hidden && el?.paused) apply()
+  }
+  for (const type of ['pointerdown', 'keydown', 'touchend']) window.addEventListener(type, go, { capture: true, passive: true })
+}
+
 function apply() {
   if (!el) return
   clearTimeout(pauseTimer)
   const t = A.ctx.currentTime
   if (on && !document.hidden) {
-    el.play().catch(() => {}) // a refused play (no gesture yet / aborted) is retried by the next apply()
+    el.play().catch(retryOnGesture) // refused (autoplay policy / embedded frame): try again on the next input
     gain.gain.cancelScheduledValues(t)
     gain.gain.setTargetAtTime(M.volume, t, M.fadeIn / 3)
   } else {
