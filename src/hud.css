@@ -332,7 +332,8 @@
   background: linear-gradient(#ffe46a, #e8a510);
 }
 
-.hud-sound {
+.hud-sound,
+.hud-music {
   position: absolute;
   right: calc(var(--sr) + 14px);
   top: calc(var(--st) + 14px);
@@ -344,9 +345,14 @@
   border-radius: 50%;
   background: rgba(16, 18, 28, 0.55);
 }
-.hud-sound svg {
+.hud-sound svg,
+.hud-music svg {
   width: 62%;
   height: 62%;
+}
+/* The music toggle sits just left of the sound toggle in every layout (same top, 54px over). */
+.hud-music {
+  right: calc(var(--sr) + 14px + 54px);
 }
 
 /* --- Bottom left: money + rate + potions -------------------------------------------------- */
@@ -653,7 +659,8 @@
   bottom: calc(var(--sb) + clamp(176px, 40vmin, 236px));
 }
 /* The touch day/respawn buttons own the top-right corner: the sound toggle sits under them. */
-.touch-ui .hud-sound {
+.touch-ui .hud-sound,
+.touch-ui .hud-music {
   top: calc(var(--st) + 70px);
 }
 .touch-ui .hud-offer {
@@ -682,17 +689,25 @@
 }
 
 /* Top right: sound. */
-.hud.compact .hud-sound {
+.hud.compact .hud-sound,
+.hud.compact .hud-music {
   top: var(--tr-top);
   right: calc(var(--sr) + var(--pad));
   width: 44px;
   height: 44px;
 }
-.touch-ui .hud.port .hud-sound {
+.hud.compact .hud-music {
+  right: calc(var(--sr) + var(--pad) + 52px);
+}
+.touch-ui .hud.port .hud-sound,
+.touch-ui .hud.port .hud-music {
   top: calc(var(--tr-top) + 52px);
 }
 .touch-ui .hud.land .hud-sound {
   right: calc(var(--sr) + var(--pad) + 108px);
+}
+.touch-ui .hud.land .hud-music {
+  right: calc(var(--sr) + var(--pad) + 160px);
 }
 
 /* Left column (portrait): currencies, then the menu buttons. */

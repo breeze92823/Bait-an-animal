@@ -10,8 +10,9 @@ import { A, installAudio as installCore, isMuted, onStart, setAdMuted, setDucked
 import * as sfx from './sfx.js'
 import * as snd from './game.js'
 import * as ambience from './ambience.js'
+import { isMusicOn, setMusicOn, toggleMusic } from './music.js'
 
-export { sfx, snd, setVolume, setMuted, isMuted, toggleMuted, setAdMuted }
+export { sfx, snd, setVolume, setMuted, isMuted, toggleMuted, setAdMuted, isMusicOn, setMusicOn, toggleMusic }
 export const audioCore = A // dev console: context state, voice count
 
 function onPress(e) {
