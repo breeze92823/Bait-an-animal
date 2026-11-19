@@ -10,9 +10,16 @@
 // account brings that progress along; an account with a save loads it instead. Signing out goes
 // back to the browser's guest save.
 // Never throws and never blocks play: without a server the game runs on the browser save.
+//
+// Presence (one room = one hub of five plots, one player each; the server assigns `plot`):
+// tickPresence() streams this player's character (`move`, ~10/s), Bloxity look (`look`: outfit key
+// + equipped ids + proportions) and base display (`base`: game.baseSnapshot() + the hooked catch)
+// into the room's roster; presence.js sendFx() events go out as `fx`, and the others' come back
+// through onFx(). remote.js reads the roster (net.room.state.players) and draws everyone else.
 import { Client } from '@colyseus/sdk'
 import { DEV_MODE, NET, SAVE, SERVER_URL } from './config.js'
-import { authState, canResolveServer, getPfp, resolveServerEndpoint, subscribeAuth, updateRoom } from './bloxity.js'
+import { authState, canResolveServer, getEquippedAvatar, getOutfitKey, getPfp, getProportions, getToken, launchRoomId, locateRoom, resolveServerEndpoint, subscribeAuth, updateRoom } from './bloxity.js'
+import { setFxSender } from './presence.js'
 
 export const net = { room: null, connected: false, hydrated: false }
 
@@ -42,7 +49,9 @@ function identity() {
 const isGuestId = (id) => id.startsWith('guest-')
 
 export const hasServer = () => !!(SERVER_URL || canResolveServer())
-const keepsLocal = () => !hasServer() || isGuestId(identity().userId)
+// The server only saves players whose Boxity token it verified: without one (guests, dev mode
+// without the SDK) progress stays in this browser.
+const keepsLocal = () => !hasServer() || isGuestId(identity().userId) || !getToken()
 
 // --- Browser save ------------------------------------------------------------------
 function localLoad() {
@@ -95,10 +104,102 @@ function persist(state, force = false) {
 }
 const flush = () => game && persist(game.S, true)
 
+// --- Presence ---------------------------------------------------------------------
+const fxListeners = new Set()
+// fn({ s: sessionId, t, d }) for every effect another player's game sent (remote.js).
+export function onFx(fn) {
+  fxListeners.add(fn)
+  return () => fxListeners.delete(fn)
+}
+// This connection's plot (0..4), or -1 while not in a room.
+export function myPlot() {
+  try {
+    return net.room?.state?.players?.get(net.room.sessionId)?.plot ?? -1
+  } catch {
+    return -1
+  }
+}
+
+const sent = { moveAt: 0, move: '', baseAt: 0, pen: '', mach: '', hook: '', lookAt: 0, look: '' }
+const r2 = (v) => Math.round(v * 100) / 100
+
+// The look the others dress this player's character in. Guests wear the default rig (as they do
+// on their own screen, main.js loadAvatar).
+function lookJson() {
+  if (!authState.user) return ''
+  const k = getOutfitKey()
+  const e = getEquippedAvatar()
+  const p = getProportions()
+  return k || e ? JSON.stringify({ k, e, p }) : ''
+}
+
+// Called every frame by main.js. now: seconds. me: { x, y, z, yaw, speed, vy, grounded } (own
+// frame). snapshot(): game.baseSnapshot(). hook(): baitFlow.hookState().
+export function tickPresence(now, me, snapshot, hook) {
+  if (!net.connected || !net.room) return
+  try {
+    const h = hook?.() ?? null
+    if (now - sent.moveAt >= NET.moveEvery) {
+      const msg = { x: r2(me.x), y: r2(me.y), z: r2(me.z), yaw: r2(me.yaw), speed: r2(me.speed), vy: r2(me.vy), grounded: !!me.grounded }
+      if (h) Object.assign(msg, { hx: r2(h.x), hy: r2(h.y), hz: r2(h.z) })
+      const key = JSON.stringify(msg)
+      if (key !== sent.move) {
+        sent.move = key
+        sent.moveAt = now
+        send('move', msg)
+      }
+    }
+    if (now - sent.baseAt >= NET.baseEvery) {
+      sent.baseAt = now
+      const snap = snapshot?.() ?? {}
+      const hookKey = h ? JSON.stringify({ s: h.s, h: h.h }) : ''
+      const msg = {}
+      if (snap.pen != null && snap.pen !== sent.pen) msg.pen = sent.pen = snap.pen
+      if (snap.mach != null && snap.mach !== sent.mach) msg.mach = sent.mach = snap.mach
+      if (hookKey !== sent.hook) msg.hook = sent.hook = hookKey
+      if (Object.keys(msg).length) send('base', msg)
+    }
+    if (now - sent.lookAt >= 1) {
+      sent.lookAt = now
+      const look = lookJson()
+      if (look !== sent.look) {
+        sent.look = look
+        send('look', { look })
+      }
+    }
+  } catch (err) {
+    console.warn('[net] presence failed', err)
+  }
+}
+
 // --- Connection -------------------------------------------------------------------
 function attach(room) {
   net.room = room
   net.connected = true
+  // The players already here when this player arrived (remote.js: "you joined X" vs "X joined you").
+  net.initialSids = null
+  room.onStateChange((state) => {
+    if (net.initialSids || net.room !== room) return
+    net.initialSids = new Set()
+    state.players?.forEach((_, sid) => net.initialSids.add(sid))
+  })
+  room.onMessage('adReward', (m) => {
+    const done = adPending
+    adPending = null
+    done?.(m && typeof m === 'object' ? m : { ok: false })
+  })
+  // A new room knows nothing about this player yet: everything goes out again.
+  Object.assign(sent, { moveAt: 0, move: '', baseAt: 0, pen: '', mach: '', hook: '', lookAt: 0, look: '' })
+  setFxSender((t, d) => send('fx', d === undefined ? { t } : { t, d }))
+  room.onMessage('fx', (m) => {
+    for (const fn of fxListeners) {
+      try {
+        fn(m)
+      } catch (err) {
+        console.warn('[net] fx listener threw', err)
+      }
+    }
+  })
   room.onMessage('progress', (doc) => {
     net.hydrated = true
     lastSent = ''
@@ -122,10 +223,9 @@ function attach(room) {
     net.hydrated = false
     console.warn('[net] the server could not read the saved progress; saving is off for this session')
   })
-  // Messages this game doesn't use yet (the template server sends them).
-  for (const type of ['spins', 'daily', 'leaderboard']) room.onMessage(type, () => {})
   room.onLeave(() => {
     if (net.room !== room) return
+    setFxSender(null)
     net.room = null
     net.connected = false
     net.hydrated = false
@@ -134,10 +234,54 @@ function attach(room) {
   })
 }
 
-async function joinRoom(options) {
-  if (SERVER_URL) return { room: await new Client(SERVER_URL).joinOrCreate('world', options), relay: '' }
-  const { endpoint, relayRoomId } = await resolveServerEndpoint(/^(guest|dev)-/.test(options.userId) ? undefined : options.userId)
+// The page's ?roomId= (Boxity's Open Rooms Join button or a friend invite), tried on the first
+// connect only: joined through the pod that holds it (locateRoom), else normal matchmaking.
+let launchRoom = launchRoomId()
+async function joinRoom(options, userId) {
+  const launch = launchRoom
+  launchRoom = ''
+  if (SERVER_URL) {
+    const client = new Client(SERVER_URL)
+    if (launch) {
+      try {
+        return { room: await client.joinById(launch.split('~').pop(), options), relay: '' }
+      } catch (err) {
+        console.info('[net] the linked room is gone or full; matchmaking instead', err?.message ?? err)
+      }
+    }
+    return { room: await client.joinOrCreate('world', options), relay: '' }
+  }
+  if (launch) {
+    try {
+      const at = await locateRoom(launch)
+      if (at) return { room: await new Client(at.endpoint).joinById(at.roomId, options), relay: at.relayRoomId }
+    } catch (err) {
+      console.info('[net] the linked room is gone or full; matchmaking instead', err?.message ?? err)
+    }
+  }
+  const { endpoint, relayRoomId } = await resolveServerEndpoint(/^(guest|dev)-/.test(userId) ? undefined : userId)
   return { room: await new Client(endpoint).joinOrCreate('world', options), relay: relayRoomId }
+}
+
+// --- Rewarded ads ----------------------------------------------------------------------------------
+// The server checks the ad's reward token with Boxity before the reward is granted. Resolves to
+// { ok, potion, minutes } (ok: false = not granted), or null when there is no server to ask.
+let adPending = null
+export function requestAdReward(rewardToken) {
+  if (!net.connected || !net.room) return Promise.resolve(null)
+  adPending?.({ ok: false })
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      if (adPending === done) adPending = null
+      resolve({ ok: false })
+    }, 15000)
+    const done = (m) => {
+      clearTimeout(timer)
+      resolve(m)
+    }
+    adPending = done
+    send('adReward', { rewardToken })
+  })
 }
 
 let connecting = false
@@ -148,7 +292,8 @@ async function connect() {
   try {
     const id = identity()
     sentId = id.userId
-    const { room, relay } = await joinRoom({ ...id, pfp: getPfp() })
+    // The server verifies the Boxity token; it never takes an account id from the client.
+    const { room, relay } = await joinRoom({ username: id.username, pfp: getPfp(), token: getToken() ?? '' }, id.userId)
     retryIn = NET.retry
     attach(room)
     updateRoom(relay ? `${relay}~${room.roomId}` : room.roomId)
@@ -188,6 +333,6 @@ export function initNet(g) {
       loadedId = ''
     }
     sentId = id.userId
-    send('identify', { ...id, pfp: getPfp() })
+    send('identify', { username: id.username, pfp: getPfp(), token: getToken() ?? '' })
   })
 }

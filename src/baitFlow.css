@@ -1,0 +1,682 @@
+/* The harpoon bait flow overlay (baitFlow.js). Parts fade in with .on; the HUD, touch
+   controls and interact prompts hide while body.bf-on. Sizes scale with --u (as the HUD). */
+.bf {
+  --ink: #1d1a22;
+  --u: clamp(0.5px, calc(min(100vw, 177.78vh) / 1920), 1.4px);
+  --st: env(safe-area-inset-top, 0px);
+  --sb: env(safe-area-inset-bottom, 0px);
+  position: fixed;
+  inset: 0;
+  z-index: 22;
+  pointer-events: none;
+  font-family: 'Fredoka', system-ui, sans-serif;
+  font-weight: 700;
+  color: #fff;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+}
+.bf * {
+  box-sizing: border-box;
+}
+.bf-part,
+.bf-rating,
+.bf-zone,
+.bf-reel-label,
+.bf-go,
+.bf-cancel,
+.bf-bait-name,
+.bf-target-name,
+.bf-boost span {
+  -webkit-text-stroke: max(3px, calc(9 * var(--u))) var(--ink);
+  paint-order: stroke fill;
+}
+.bf-part {
+  position: absolute;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.22s ease, visibility 0s linear 0.22s;
+}
+.bf-part.on {
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 0.22s ease, visibility 0s;
+}
+.bf-part.on button,
+button.bf-part.on {
+  pointer-events: auto;
+}
+.bf svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+body.bf-on .hud > :not(.hud-toast):not(.hud-banner) {
+  opacity: 0 !important;
+  pointer-events: none !important;
+  transition: opacity 0.25s;
+}
+body.bf-on .touch-root,
+body.bf-on .ix-prompt {
+  display: none !important;
+}
+
+/* --- Screen glow + flash ---------------------------------------------------------------- */
+.bf-glow {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  background:
+    radial-gradient(ellipse at 50% 55%, rgba(255, 236, 150, 0) 35%, rgba(255, 168, 48, 0.42) 100%),
+    linear-gradient(to top, rgba(214, 255, 70, 0.32), rgba(214, 255, 70, 0) 45%);
+  /* No mix-blend-mode: blending over the WebGL canvas composites as black in some browsers. */
+}
+.bf-flash {
+  position: absolute;
+  inset: 0;
+  background: #fff;
+  opacity: 0;
+}
+.bf-flash.go {
+  animation: bf-flash 0.55s ease-out;
+}
+@keyframes bf-flash {
+  0% { opacity: 0; }
+  15% { opacity: 0.92; }
+  100% { opacity: 0; }
+}
+
+/* --- Power meter ---------------------------------------------------------------------- */
+.bf-meter {
+  left: 69.7%;
+  top: 25.5%;
+  height: 56%;
+  width: calc(54 * var(--u));
+}
+.bf-meter-luck {
+  position: absolute;
+  bottom: calc(100% + 10 * var(--u));
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: calc(4 * var(--u));
+  white-space: nowrap;
+  font-size: calc(44 * var(--u));
+}
+.bf-meter-luck i {
+  width: calc(58 * var(--u));
+  height: calc(58 * var(--u));
+  -webkit-text-stroke: 0;
+}
+.bf-meter-bar {
+  position: absolute;
+  inset: 0;
+  border: calc(6 * var(--u)) solid var(--ink);
+  border-radius: calc(4 * var(--u));
+  overflow: hidden;
+  box-shadow: 0 0 0 calc(2 * var(--u)) rgba(255, 255, 255, 0.35);
+}
+.bf-meter-dim,
+.bf-meter-fill {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(#55f02a 0%, #b9f21c 26%, #ffe600 50%, #ffa21a 74%, #ff3a14 100%);
+}
+.bf-meter-dim {
+  opacity: 0.32;
+  filter: saturate(0.6) brightness(0.7);
+}
+.bf-meter-fill {
+  clip-path: inset(calc((1 - var(--p, 0)) * 100%) 0 0 0);
+  box-shadow: inset 0 0 calc(12 * var(--u)) rgba(255, 255, 255, 0.5);
+}
+.bf-meter-bar s {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: calc(5 * var(--u));
+  background: var(--ink);
+  text-decoration: none;
+}
+.bf-meter-bar s:nth-of-type(1) { top: 20%; }
+.bf-meter-bar s:nth-of-type(2) { top: 40%; }
+.bf-meter-bar s:nth-of-type(3) { top: 60%; }
+.bf-meter-bar s:nth-of-type(4) { top: 80%; }
+
+/* --- Next Shot boost ------------------------------------------------------------------ */
+.bf-boost {
+  left: 16%;
+  top: 22%;
+  transform: translateX(-50%);
+  width: calc(240 * var(--u));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  border: 0;
+  padding: 0;
+  background: none;
+  font: inherit;
+  color: #fff;
+  cursor: pointer;
+  min-height: 44px;
+}
+.bf-boost-rays {
+  position: absolute;
+  left: 50%;
+  top: 40%;
+  width: calc(230 * var(--u));
+  height: calc(230 * var(--u));
+  transform: translate(-50%, -50%);
+  background: repeating-conic-gradient(rgba(255, 245, 160, 0.55) 0 10deg, rgba(255, 245, 160, 0) 10deg 22deg);
+  -webkit-mask: radial-gradient(circle, #000 20%, transparent 70%);
+  mask: radial-gradient(circle, #000 20%, transparent 70%);
+  animation: bf-spin 7s linear infinite;
+  -webkit-text-stroke: 0;
+}
+@keyframes bf-spin {
+  to { transform: translate(-50%, -50%) rotate(360deg); }
+}
+.bf-boost-top {
+  position: relative;
+  font-size: calc(28 * var(--u));
+  color: #c9ff8a;
+}
+.bf-boost i {
+  position: relative;
+  width: calc(118 * var(--u));
+  height: calc(118 * var(--u));
+  margin: calc(-4 * var(--u)) 0 calc(-14 * var(--u));
+  filter: drop-shadow(0 0 calc(10 * var(--u)) rgba(150, 255, 90, 0.8));
+  animation: bf-bob 1.6s ease-in-out infinite;
+}
+@keyframes bf-bob {
+  50% { transform: translateY(calc(-6 * var(--u))) rotate(-6deg); }
+}
+.bf-boost-luck {
+  position: relative;
+  font-size: calc(52 * var(--u));
+  color: #b6ff3a;
+  white-space: nowrap;
+}
+.bf-boost-price {
+  position: relative;
+  margin-top: calc(4 * var(--u));
+  min-width: calc(150 * var(--u));
+  padding: calc(4 * var(--u)) calc(18 * var(--u));
+  border: calc(5 * var(--u)) solid #123a0c;
+  border-radius: calc(6 * var(--u));
+  background: linear-gradient(#9ef53a, #3fcf1c);
+  font-size: calc(36 * var(--u));
+  -webkit-text-stroke-width: max(2px, calc(7 * var(--u)));
+}
+.bf-boost.ready .bf-boost-price {
+  background: linear-gradient(#ffe95a, #ffb21f);
+  border-color: #6a3a00;
+}
+.bf-boost.bought {
+  animation: bf-pop 0.4s cubic-bezier(0.2, 1.6, 0.4, 1);
+}
+.bf-boost.shake {
+  animation: bf-shake 0.35s;
+}
+@keyframes bf-shake {
+  20%, 60% { transform: translateX(calc(-50% - 8px)); }
+  40%, 80% { transform: translateX(calc(-50% + 8px)); }
+}
+
+/* --- Aim panel: bait name, Bait, Cancel ------------------------------------------------- */
+.bf-aim {
+  left: 50%;
+  bottom: calc(var(--sb) + 4.5%);
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(8 * var(--u));
+}
+.bf-bait {
+  display: flex;
+  align-items: center;
+  gap: calc(10 * var(--u));
+}
+.bf-bait-name {
+  font-size: calc(42 * var(--u));
+  white-space: nowrap;
+}
+/* Target picker: Max Reach, or a zone the spear is sure to land in. */
+.bf-target {
+  display: flex;
+  align-items: center;
+  gap: calc(10 * var(--u));
+}
+.bf-target.off {
+  display: none;
+}
+.bf-target-name {
+  font-size: calc(32 * var(--u));
+  color: #bfe8ff;
+  white-space: nowrap;
+  min-width: calc(330 * var(--u));
+  text-align: center;
+}
+.bf-target .bf-arrow {
+  width: max(44px, calc(46 * var(--u)));
+  height: max(44px, calc(46 * var(--u)));
+}
+.bf-arrow {
+  width: max(44px, calc(56 * var(--u)));
+  height: max(44px, calc(56 * var(--u)));
+  border: calc(4 * var(--u)) solid var(--ink);
+  border-radius: 50%;
+  background: linear-gradient(#ffffff, #cfd8e6);
+  color: var(--ink);
+  font-size: calc(22 * var(--u));
+  cursor: pointer;
+}
+.bf-go,
+.bf-cancel {
+  border: calc(6 * var(--u)) solid var(--ink);
+  border-radius: calc(4 * var(--u));
+  font: inherit;
+  color: #fff;
+  cursor: pointer;
+  box-shadow: inset 0 calc(-8 * var(--u)) 0 rgba(0, 0, 0, 0.18), inset 0 calc(8 * var(--u)) 0 rgba(255, 255, 255, 0.3);
+}
+.bf-go {
+  width: calc(272 * var(--u));
+  height: max(52px, calc(78 * var(--u)));
+  background: linear-gradient(#a6f51a, #46d40e);
+  font-size: calc(58 * var(--u));
+  animation: bf-pulse 1s ease-in-out infinite;
+}
+.bf-cancel {
+  width: calc(206 * var(--u));
+  height: max(44px, calc(56 * var(--u)));
+  background: linear-gradient(#ff5a4a, #e3201a);
+  font-size: calc(40 * var(--u));
+}
+.bf-go:active,
+.bf-cancel:active {
+  transform: scale(0.94);
+}
+@keyframes bf-pulse {
+  50% { transform: scale(1.05); }
+}
+
+/* --- Shot rating ----------------------------------------------------------------------- */
+.bf-rating {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  font-size: calc(104 * var(--u));
+  opacity: 0;
+  transform: translate(-50%, -50%);
+  white-space: nowrap;
+  -webkit-text-stroke-width: max(4px, calc(12 * var(--u)));
+  text-shadow: 0 calc(6 * var(--u)) 0 var(--ink);
+}
+.bf-rating.perfect { color: #6cf02a; -webkit-text-stroke-color: #0e3a08; text-shadow: 0 calc(6 * var(--u)) 0 #0e3a08, 0 0 calc(30 * var(--u)) rgba(120, 255, 60, 0.7); }
+.bf-rating.great { color: #c6f21c; }
+.bf-rating.good { color: #ffe100; }
+.bf-rating.weak { color: #ff8a3a; }
+.bf-rating.show {
+  animation: bf-rating 1.3s cubic-bezier(0.2, 1.5, 0.4, 1) forwards;
+}
+@keyframes bf-rating {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.3); }
+  14% { opacity: 1; transform: translate(-50%, -50%) scale(1.08); }
+  24%, 70% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -62%) scale(1); }
+}
+
+/* --- Flight: distance bar + multiplier --------------------------------------------------- */
+.bf-dist {
+  left: 50%;
+  top: calc(var(--st) + 12.5%);
+  width: min(46%, 92vw);
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(6 * var(--u));
+}
+.bf-dist-text {
+  font-size: calc(40 * var(--u));
+  white-space: nowrap;
+}
+.bf-track {
+  position: relative;
+  width: 100%;
+  height: calc(64 * var(--u));
+}
+.bf-cells {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  border: calc(5 * var(--u)) solid var(--ink);
+  border-radius: calc(4 * var(--u));
+  overflow: hidden;
+  background: #2a2350;
+}
+.bf-cell {
+  position: relative;
+  flex: 1;
+  display: grid;
+  place-items: center;
+  border-left: calc(3 * var(--u)) solid var(--ink);
+  background: linear-gradient(#4a3f86, #2f2763);
+  -webkit-text-stroke: 0;
+  font-size: calc(34 * var(--u));
+  filter: grayscale(0.25) brightness(0.8);
+}
+.bf-cell:first-of-type {
+  border-left: 0;
+}
+.bf-cell b {
+  position: relative;
+  z-index: 1;
+  font-weight: 400;
+  filter: drop-shadow(0 calc(2 * var(--u)) 0 rgba(0, 0, 0, 0.6));
+}
+.bf-cell.reached {
+  filter: none;
+}
+.bf-track-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  z-index: 0;
+  background: linear-gradient(#a9f56a, #4fcf38);
+  box-shadow: 0 0 calc(14 * var(--u)) rgba(150, 255, 90, 0.8);
+}
+.bf-cells .bf-cell {
+  background: transparent;
+}
+.bf-cells {
+  background: linear-gradient(#4a3f86, #2f2763);
+}
+.bf-me {
+  position: absolute;
+  z-index: 2;
+  left: calc(-30 * var(--u));
+  top: 50%;
+  width: calc(78 * var(--u));
+  height: calc(78 * var(--u));
+  transform: translateY(-50%);
+  border: calc(5 * var(--u)) solid #fff;
+  border-radius: 50%;
+  overflow: hidden;
+  background: #8fd0ff;
+  box-shadow: 0 0 0 calc(3 * var(--u)) var(--ink);
+}
+.bf-me img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.bf-zone {
+  font-size: calc(30 * var(--u));
+  color: #fff6a0;
+}
+.bf-zone.pop {
+  animation: bf-pop 0.45s cubic-bezier(0.2, 1.6, 0.4, 1);
+}
+.bf-mult {
+  left: 50%;
+  top: calc(var(--st) + 26%);
+  transform: translateX(-50%);
+  font-size: calc(92 * var(--u));
+  -webkit-text-stroke-width: max(4px, calc(12 * var(--u)));
+}
+.bf-mult.fade {
+  animation: bf-ghost 0.8s ease-out forwards;
+}
+@keyframes bf-ghost {
+  0% { opacity: 1; transform: translateX(-50%) scale(1); }
+  100% { opacity: 0; transform: translateX(-50%) scale(1.25); filter: blur(2px); }
+}
+
+/* --- Luck badge (charging bush) ----------------------------------------------------------- */
+.bf-luck {
+  left: 50%;
+  top: calc(var(--st) + 23%);
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: calc(10 * var(--u));
+  white-space: nowrap;
+  font-size: calc(80 * var(--u));
+  color: #a6ff3a;
+  -webkit-text-stroke: max(4px, calc(12 * var(--u))) #0f2e08;
+}
+.bf-luck i {
+  width: calc(124 * var(--u));
+  height: calc(124 * var(--u));
+  -webkit-text-stroke: 0;
+  filter: drop-shadow(0 0 calc(10 * var(--u)) rgba(160, 255, 90, 0.7));
+}
+.bf-luck.tick span {
+  display: inline-block;
+  animation: bf-tick 0.18s ease-out;
+}
+@keyframes bf-tick {
+  0% { transform: scale(1.12); }
+  100% { transform: scale(1); }
+}
+
+/* --- Hooked ---------------------------------------------------------------------------------- */
+.bf-odds {
+  left: 50%;
+  top: calc(var(--st) + 7%);
+  transform: translateX(-50%);
+  font-size: calc(92 * var(--u));
+  color: var(--c, #62e34a);
+  opacity: 0.8;
+  white-space: nowrap;
+  filter: brightness(0.7);
+}
+.bf-odds.on {
+  opacity: 0.8;
+}
+.bf-hooked {
+  left: 50%;
+  top: 34%;
+  transform: translate(-50%, -50%);
+  font-size: calc(140 * var(--u));
+  color: #5cf02a;
+  white-space: nowrap;
+  -webkit-text-stroke: max(5px, calc(16 * var(--u))) #0f3a08;
+  text-shadow: 0 calc(8 * var(--u)) 0 #0f3a08, 0 0 calc(40 * var(--u)) var(--c, #62e34a);
+}
+.bf-hooked.pop,
+.bf-odds.pop {
+  animation: bf-pop 0.5s cubic-bezier(0.2, 1.7, 0.4, 1);
+}
+.bf-odds.pop {
+  animation-name: bf-pop-x;
+}
+@keyframes bf-pop {
+  0% { transform: translate(-50%, -50%) scale(0.2); }
+  100% { transform: translate(-50%, -50%) scale(1); }
+}
+@keyframes bf-pop-x {
+  0% { transform: translateX(-50%) scale(0.3); }
+  100% { transform: translateX(-50%) scale(1); }
+}
+.bf-zone.pop {
+  animation-name: bf-pop-z;
+}
+@keyframes bf-pop-z {
+  0% { transform: scale(0.4); }
+  100% { transform: scale(1); }
+}
+.bf-hand {
+  left: 55%;
+  top: 50%;
+  width: calc(150 * var(--u));
+  transform: translate(-25%, -35%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-size: calc(62 * var(--u));
+  animation: bf-hand 0.6s ease-in-out infinite;
+}
+.bf-hand svg {
+  width: calc(130 * var(--u));
+  height: calc(130 * var(--u));
+  transform: rotate(-20deg);
+}
+.bf-hand span {
+  margin-top: calc(-40 * var(--u));
+}
+.bf-hand.tap svg {
+  animation: bf-tap 0.16s ease-out;
+}
+@keyframes bf-hand {
+  50% { margin-top: calc(-10 * var(--u)); }
+}
+@keyframes bf-tap {
+  0% { transform: rotate(-20deg) scale(0.8); }
+  100% { transform: rotate(-20deg) scale(1); }
+}
+.bf-tip {
+  left: 50%;
+  top: 66.5%;
+  transform: translate(-50%, -50%);
+  font-size: calc(52 * var(--u));
+  white-space: nowrap;
+}
+
+/* --- Reel bar ------------------------------------------------------------------------------- */
+.bf-reel {
+  left: 50%;
+  bottom: calc(var(--sb) + 6%);
+  width: min(46%, 92vw);
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(6 * var(--u));
+}
+/* Fixed columns (cursor | word | count) so the row never shifts when "Click Fast!" swaps for
+   the wider "Pull Harder!" or the count changes digits. */
+.bf-reel-label {
+  display: grid;
+  grid-template-columns: auto auto calc(110 * var(--u));
+  align-items: center;
+  column-gap: calc(8 * var(--u));
+  white-space: nowrap;
+}
+/* The word's box is always as wide as the longer word (an invisible copy stacked in it). */
+.bf-reel-word {
+  display: grid;
+  justify-items: center;
+}
+.bf-reel-word::after {
+  content: 'Pull Harder!';
+  visibility: hidden;
+  height: 0;
+  overflow: hidden;
+}
+.bf-reel-n {
+  text-align: left;
+  font-variant-numeric: tabular-nums;
+}
+.bf-reel-label svg {
+  width: calc(64 * var(--u));
+  height: calc(64 * var(--u));
+}
+.bf-reel-word {
+  font-size: calc(36 * var(--u));
+}
+.bf-reel.tug .bf-reel-word {
+  color: #ffe14a;
+}
+.bf-reel-n {
+  font-size: calc(48 * var(--u));
+}
+.bf-reel-bar {
+  position: relative;
+  width: 100%;
+  height: calc(54 * var(--u));
+  border: calc(5 * var(--u)) solid var(--ink);
+  border-radius: calc(3 * var(--u));
+  background: rgba(20, 30, 10, 0.18);
+}
+.bf-reel-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(50% - var(--p, 0) * 50%);
+  width: calc(var(--p, 0) * 100%);
+  background: linear-gradient(#f0e43a, #c9b414);
+  transition: background 0.2s;
+}
+.bf-reel.done .bf-reel-fill {
+  background: linear-gradient(#b6ff3a, #5fd41c);
+  box-shadow: 0 0 calc(18 * var(--u)) rgba(150, 255, 60, 0.8);
+}
+.bf-reel-bar s {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: calc(2 * var(--u));
+  background: rgba(255, 255, 255, 0.45);
+  text-decoration: none;
+}
+.bf-reel-bar s:nth-of-type(1) { left: 10%; }
+.bf-reel-bar s:nth-of-type(2) { left: 20%; }
+.bf-reel-bar s:nth-of-type(3) { left: 30%; }
+.bf-reel-bar s:nth-of-type(4) { left: 40%; }
+.bf-reel-bar s:nth-of-type(5) { left: 50%; }
+.bf-reel-bar s:nth-of-type(6) { left: 60%; }
+.bf-reel-bar s:nth-of-type(7) { left: 70%; }
+.bf-reel-bar s:nth-of-type(8) { left: 80%; }
+.bf-reel-bar s:nth-of-type(9) { left: 90%; }
+.bf-reel-card {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: calc(172 * var(--u));
+  height: calc(86 * var(--u));
+  transform: translate(-50%, -50%);
+  background: #fff;
+  border-radius: calc(4 * var(--u));
+  display: grid;
+  place-items: center;
+  box-shadow: 0 calc(3 * var(--u)) 0 rgba(0, 0, 0, 0.25);
+}
+.bf-reel-card img {
+  position: absolute;
+  inset: 4%;
+  width: 92%;
+  height: 92%;
+  object-fit: contain;
+}
+.bf-reel.bump .bf-reel-card {
+  animation: bf-card 0.15s ease-out;
+}
+@keyframes bf-card {
+  0% { transform: translate(-50%, -50%) scale(1.12) rotate(-4deg); }
+  100% { transform: translate(-50%, -50%) scale(1); }
+}
+
+/* --- Phones / narrow screens ------------------------------------------------------------- */
+@media (max-aspect-ratio: 1/1) {
+  .bf { --u: clamp(0.45px, calc(100vw / 1000), 1px); }
+  .bf-meter { left: auto; right: 6%; top: 24%; height: 44%; }
+  .bf-meter-luck { left: auto; right: 0; transform: none; }
+  .bf-boost { left: 22%; top: 18%; }
+  .bf-dist,
+  .bf-reel { width: 88%; }
+  .bf-hooked { top: 30%; }
+}
+@media (max-height: 480px) and (min-aspect-ratio: 1/1) {
+  .bf-meter { top: 22%; height: 50%; }
+  .bf-boost { top: 14%; }
+  .bf-aim { bottom: calc(var(--sb) + 2%); }
+}

@@ -32,11 +32,24 @@ export function put(parent, geo, mat, x = 0, y = 0, z = 0, shadows = true) {
 }
 
 export const yawQuat = (yaw) => ({ x: 0, y: Math.sin(yaw / 2), z: 0, w: Math.cos(yaw / 2) })
+// Shift added to every collider below: base.js builds a copy of the base at another plot by
+// setting this for the duration of the build (its meshes sit under a group moved by the same x).
+export const colliderShift = { x: 0 }
+// Runs fn with the shift set to x (colliders a base adds later, e.g. when a machine is bought).
+export function withColliderShift(x, fn) {
+  const prev = colliderShift.x
+  colliderShift.x = x
+  try {
+    return fn()
+  } finally {
+    colliderShift.x = prev
+  }
+}
 export function solidBox(hx, hy, hz, x, y, z, yaw = 0) {
-  return addFixed(RAPIER.ColliderDesc.cuboid(hx, hy, hz), { x, y, z }, yawQuat(yaw))
+  return addFixed(RAPIER.ColliderDesc.cuboid(hx, hy, hz), { x: x + colliderShift.x, y, z }, yawQuat(yaw))
 }
 export function solidPole(radius, height, x, z) {
-  addFixed(RAPIER.ColliderDesc.cylinder(height / 2, radius), { x, y: height / 2, z })
+  addFixed(RAPIER.ColliderDesc.cylinder(height / 2, radius), { x: x + colliderShift.x, y: height / 2, z })
 }
 
 // --- Neon: unlit materials that glow ----------------------------------------------

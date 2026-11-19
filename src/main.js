@@ -1,6 +1,6 @@
 import { ACESFilmicToneMapping, Clock, Group, PCFSoftShadowMap, PerspectiveCamera, Raycaster, Scene, SRGBColorSpace, Vector2, WebGLRenderer } from 'three'
 import * as config from './config.js'
-import { BASE, CAMERA, graphicsPreset, RENDER } from './config.js'
+import { BASE, CAMERA, graphicsPreset, PLOTS, RENDER } from './config.js'
 import * as bloxity from './bloxity.js'
 import { install as installInput, onKey } from './input.js'
 import { installTouch } from './touch.js'
@@ -17,12 +17,18 @@ import { createEmitter, setParticleDensity, updateParticles } from './particles.
 import { createFx } from './fx.js'
 import { createGame } from './game.js'
 import { createTraining } from './training.js'
+import { createBaitFlow } from './baitFlow.js'
 import { createInteract } from './interact.js'
-import { renderThumbs } from './thumbs.js'
+import { renderThumbs, THUMBS } from './thumbs.js'
+import { renderZoneThumbs } from './zones.js'
 import { createHud } from './hud.js'
 import { createWindows } from './windows.js'
-import { initNet } from './net.js'
-import { anyWindowOpen, closeTopWindow, setWindowReserved } from './uiWindow.js'
+import { initNet, tickPresence } from './net.js'
+import { createRemotes } from './remote.js'
+import { anyWindowOpen, closeTopWindow, onWindowChange, setWindowReserved } from './uiWindow.js'
+import { EmotePlayer, loadEmotes } from './emotes.js'
+import { sendFx } from './presence.js'
+import { setAdMuted } from './audio/index.js'
 import { audioCore, installAudio, updateAudio } from './audio/index.js'
 import { createPostFx } from './postfx.js'
 import { setNeonBloom } from './propkit.js'
@@ -97,6 +103,11 @@ lighting = createLighting(scene, renderer, preset)
 const world = createWorld(scene) // the hub: field, lane, cliffs, canyon, scenery, clouds
 const base = buildBase(scene)
 const harpoon = createHarpoon(scene, BASE.harpoon)
+// The four other plots along the path: the same base (minus the upgrade signs, sell stall and
+// buy boards) and harpoon. Empty until another player in the room holds one (remote.js).
+const otherPlots = PLOTS.xs
+  .filter((x) => x !== PLOTS.own)
+  .map((x) => ({ x, base: buildBase(scene, { x, vacant: true, boards: false }), harpoon: createHarpoon(scene, { ...BASE.harpoon, x: BASE.harpoon.x + x }) }))
 const fx = createFx(scene)
 
 // A giant voxel dragon on a stone plinth in the park: the hub's landmark.
@@ -106,7 +117,7 @@ const fx = createFx(scene)
   box(scene, 7.4, 0.6, 7.4, STATUE.x, 1.9, STATUE.z, mat.studs('#b9bfca'))
   solidBox(4.5, 1.1, 4.5, STATUE.x, 1.1, STATUE.z)
   const statue = buildAnimal('dragon', { shiny: true })
-  statue.root.scale.setScalar(STATUE.scale)
+  statue.root.scale.setScalar((STATUE.scale * 3.9) / statue.height) // as tall as the 3.9 m model at STATUE.scale, whatever the species size
   statue.root.position.set(STATUE.x, 2.2, STATUE.z)
   statue.root.rotation.y = 0.9
   statue.animate(0, 0, 1.2, 'idle')
@@ -115,8 +126,8 @@ const fx = createFx(scene)
   createEmitter(scene, { boxes: [{ x: STATUE.x, y: 6, z: STATUE.z, sx: 6, sy: 5, sz: 6 }], count: 40, life: 3, velocity: [0, 0.6, 0], spread: [0.3, 0.3, 0.3], size: 0.35, color: '#ffe680', intensity: 2, twinkle: 6, sprite: 'sparkle', seed: 12 })
 }
 // Drifting pollen over the field and fireflies in the canyon.
-createEmitter(scene, { boxes: [{ x: 0, y: 3, z: 0, sx: 55, sy: 2.5, sz: 45 }], count: 260, life: 9, velocity: [0.35, 0.12, -0.2], spread: [0.3, 0.15, 0.3], size: 0.12, color: '#fffbe0', intensity: 1.4, twinkle: 3, seed: 21 })
-createEmitter(scene, { boxes: [{ x: 0, y: 2.5, z: -80, sx: 9, sy: 2, sz: 30 }], count: 70, life: 5, velocity: [0, 0.2, 0], spread: [0.5, 0.3, 0.5], size: 0.22, color: '#d8ff7a', intensity: 2.4, twinkle: 5, sprite: 'sparkle', seed: 33 })
+createEmitter(scene, { boxes: PLOTS.xs.map((x) => ({ x, y: 3, z: 0, sx: 39, sy: 2.5, sz: 45 })), count: 260 * PLOTS.xs.length, life: 9, velocity: [0.35, 0.12, -0.2], spread: [0.3, 0.15, 0.3], size: 0.12, color: '#fffbe0', intensity: 1.4, twinkle: 3, seed: 21 })
+createEmitter(scene, { boxes: PLOTS.xs.map((x) => ({ x, y: 2.5, z: -80, sx: 9, sy: 2, sz: 30 })), count: 70 * PLOTS.xs.length, life: 5, velocity: [0, 0.2, 0], spread: [0.5, 0.3, 0.5], size: 0.22, color: '#d8ff7a', intensity: 2.4, twinkle: 5, sprite: 'sparkle', seed: 33 })
 setParticleDensity(preset.particles)
 
 createPlayerBody()
@@ -125,6 +136,7 @@ syncYawToPlayer()
 // --- Game, HUD, windows, prompts ------------------------------------------------
 bloxity.loadingStep('Painting portraits')
 renderThumbs()
+THUMBS.zone = renderZoneThumbs(renderer, scene, world.zones.zones) // zone pictures for the Pet Index
 game = createGame({ scene, base, harpoon, fx, camera })
 game.records = world.records
 const windows = createWindows(game)
@@ -141,6 +153,43 @@ initNet(game)
 const training = createTraining({ scene, game, base, fx, camera })
 game.training = training
 game.ui.train = () => training.start()
+// The harpoon shot: aim meter, flight, luck bush, hooked + reel minigame (baitFlow.js).
+const baitFlow = createBaitFlow({ scene, harpoon, game, fx, zones: world.zones })
+// The other players in the room: their Bloxity characters, pets and plots.
+const remotes = createRemotes({ scene, fx, plots: otherPlots })
+
+// --- Boxity platform features (bloxity.js opts in right after init) --------------------------------
+// Emotes picked in Boxity's wheel play on the player's character (and on everyone else's screen).
+loadEmotes()
+let localEmote = null
+async function playLocalEmote(id) {
+  if (!id) {
+    if (localEmote?.active) {
+      localEmote.stop()
+      sendFx('emoteStop')
+    }
+    return
+  }
+  await loadEmotes()
+  if (localEmote?.play(id)) sendFx('emote', { id })
+}
+bloxity.onEmote(playLocalEmote)
+// Boxity chat: each message as a bubble over its sender's head (Boxity draws the chat itself).
+bloxity.onChat((m) => {
+  if (m?.isLocalPlayer) remotes.bubbleLocal(playerGroup, m)
+  else remotes.bubble(m)
+})
+// Ad breaks: the game pauses and goes silent until the ad is over.
+let adBreak = false
+bloxity.onAdBreak((on) => {
+  adBreak = on
+  setAdMuted(on)
+})
+// Screen ads: banners around the full-screen panels; none while playing.
+onWindowChange((open) => bloxity.adScreen(open ? 'panel' : 'gameplay'))
+const presenceMe = { x: 0, y: 0, z: 0, yaw: 0, speed: 0, vy: 0, grounded: true }
+const baseSnapshot = () => game.baseSnapshot()
+const hookState = () => baitFlow.hookState()
 const interact = createInteract({ targets: () => game.targets(), getMoney: () => game.money })
 bloxity.onReservedAreas((areas) => {
   hud.setReserved(areas)
@@ -183,6 +232,7 @@ function setAvatar(next) {
   disposeAnimator(animator)
   avatar = next
   playerGroup.add(avatar)
+  localEmote = new EmotePlayer(avatar) // before the animator moves a bone: it reads the bind pose
   animator = makeAnimator(avatar)
   game?.setAvatar(avatar)
   training?.setAvatar(avatar)
@@ -236,6 +286,7 @@ const audioState = { camera, player: { x: 0, y: 0, z: 0, vy: 0, grounded: true, 
 
 renderer.setAnimationLoop(() => {
   const dt = Math.min(clock.getDelta(), 0.1) // clamp huge frames (tab switch, breakpoint)
+  if (adBreak) return // a Boxity ad is playing over the game: everything waits
   const elapsed = clock.elapsedTime
 
   stepPhysics(dt) // runs the player controller + world at the fixed rate, interpolates bodies
@@ -253,14 +304,31 @@ renderer.setAnimationLoop(() => {
     turn: 0,
     custom: training.pose,
   })
+  // An emote plays over the walk pose and stops as soon as the player moves (or trains / baits).
+  if (localEmote?.playing && (speed > 0.6 || !player.grounded || training.active || baitFlow.active)) {
+    localEmote.stop()
+    sendFx('emoteStop')
+  }
+  localEmote?.update(dt)
   training.place(playerGroup)
+  baitFlow.seat(playerGroup) // on the harpoon while baiting
 
   updateCamera(camera, dt)
-  world.update(dt, elapsed)
   base.update(dt, elapsed)
   harpoon.update(dt, elapsed)
+  for (const o of otherPlots) {
+    o.base.update(dt, elapsed)
+    o.harpoon.update(dt, elapsed)
+  }
   game.update(dt, elapsed)
-  interact.update(dt, camera, training.active ? null : p)
+  baitFlow.update(dt, elapsed)
+  remotes.update(dt, elapsed)
+  const shown = playerGroup.position // where the avatar is drawn (on the harpoon's deck while baiting)
+  Object.assign(presenceMe, { x: shown.x, y: shown.y, z: shown.z, yaw: playerGroup.rotation.y, speed, vy: player.velocity.y, grounded: player.grounded })
+  tickPresence(elapsed, presenceMe, baseSnapshot, hookState)
+  baitFlow.applyCamera(camera, dt) // blends from the chase cam to the shot's views
+  world.update(dt, elapsed, camera) // Lane zone culling + fog (after the camera is final)
+  interact.update(dt, camera, training.active || baitFlow.active ? null : p)
   hud.update(dt)
   fx.update(dt, camera, renderer.domElement.height)
   updateParticles(elapsed, renderer.domElement.height)
@@ -285,6 +353,7 @@ renderer.setAnimationLoop(() => {
     if (avatarReady || readySince > 5) {
       shownLoading = false
       bloxity.notifyFirstFrame()
+      bloxity.adScreen('gameplay')
     }
   }
 })
@@ -297,5 +366,5 @@ if (import.meta.env.DEV) {
     resetPlayer({ x, y, z }, facing)
     syncYawToPlayer()
   }
-  window.__game = { audio: audioCore, config, player, scene, renderer, camera, postfx, bodies: bodyCount, toggleMode, teleport, base, game, harpoon, fx, hud, windows, training }
+  window.__game = { audio: audioCore, config, player, scene, renderer, camera, postfx, bodies: bodyCount, toggleMode, teleport, base, game, harpoon, fx, hud, windows, training, baitFlow, remotes, otherPlots, emote: playLocalEmote }
 }

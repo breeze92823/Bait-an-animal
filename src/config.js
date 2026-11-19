@@ -14,8 +14,8 @@ export const GROUND_Y = 0
 // north-south through the middle and leaves through a canyon in the north wall
 // into the Lane (the wild area the harpoon fires into; blocked out, not detailed yet).
 export const HUB = {
-  minX: -58,
-  maxX: 58,
+  minX: -214, // wide enough for the five plots (PLOTS) plus the park at either end
+  maxX: 214,
   minZ: -48, // north wall (the canyon cuts through it)
   maxZ: 48, // south wall
   wallHeight: 13, // first cliff tier
@@ -35,15 +35,20 @@ export const HUB = {
     log: '#e0743c',
     bush: '#3fb35a',
   },
-  trees: 70, // scattered voxel trees (west park + edges)
-  rocks: 44,
-  flowers: 90,
+  trees: 250, // scattered voxel trees (between the plots + edges)
+  rocks: 160,
+  flowers: 330,
 }
 
 // The yellow path runs east-west along the north side of the hub, in front of the
 // north cliffs. North of the player's base a canyon cuts through the wall: the Lane,
 // the wild area the harpoon fires into (blocked out, not detailed yet).
 export const PATH = { z: -40, halfWidth: 5 }
+// Five identical plots side by side along the path, each a base with its own harpoon,
+// canyon and Lane. The player's is the middle one (x = 0): every BASE / LANE position
+// below is for that plot; the other four are copies shifted by `xs` (decor for now).
+// `spacing` = 2 * (wildHalf + 9): the Lanes' side cliffs meet exactly.
+export const PLOTS = { spacing: 78, xs: [-156, -78, 0, 78, 156], own: 0 }
 export const LANE = {
   canyonHalf: 10, // half-width of the gap in the north wall (centred on the base, x = 0)
   canyonEnd: -96, // z where the canyon opens into the first zone's wild area
@@ -52,23 +57,25 @@ export const LANE = {
   zoneLength: 70, // m of every zone after the Meadow
   canyonWall: '#3d8de8', // the blue panels lining the canyon
   corridor: 9, // half-width kept clear of big props (the catch is reeled along it)
-  viewDistance: 230, // zone scenery further than this from the camera is hidden (fog covers the cut)
+  viewDistance: 260, // zone scenery further than this from the camera is hidden (fog covers the cut)
+  decorView: 200, // the same for the other four plots' Lanes (measured in x and z)
 }
 
 // The ten zones of the Lane, south to north. Each has its own ground, walls, props,
 // particles and animals; the spear lands in a zone by distance (harpoon strength).
-// mult: income multiplier of the zone's animals.
+// mult: income multiplier of the zone's animals (x4 per zone; the rarer pools of the far
+// zones add the rest, so a new zone pays roughly 6-10x the last one).
 export const ZONES = [
   { id: 'meadow', name: 'Meadow', icon: '🌻', ground: '#47c46a', ground2: '#5fd47c', wall: '#e0774a', accent: '#ffe14a', mult: 1 },
-  { id: 'coral', name: 'Coral', icon: '🐚', ground: '#f3dca0', ground2: '#ffe9b8', wall: '#36b6d8', accent: '#ff7fb3', mult: 15 },
-  { id: 'snow', name: 'Snow', icon: '⛄', ground: '#eef6ff', ground2: '#ffffff', wall: '#9fd2ff', accent: '#bfe8ff', mult: 225 },
-  { id: 'desert', name: 'Desert', icon: '🌵', ground: '#f2c76b', ground2: '#ffd889', wall: '#d98a3d', accent: '#5fbf3a', mult: 3400 },
-  { id: 'crystal', name: 'Crystal', icon: '💎', ground: '#9aa3b8', ground2: '#b4bccc', wall: '#7a5cc9', accent: '#c48bff', mult: 5.1e4 },
-  { id: 'jungle', name: 'Jungle', icon: '🌴', ground: '#2f9e3e', ground2: '#3fb850', wall: '#3c7a2a', accent: '#ffd23a', mult: 7.6e5 },
-  { id: 'golden', name: 'Golden', icon: '👑', ground: '#ffe9a6', ground2: '#fff4cf', wall: '#f2b630', accent: '#fff07a', mult: 1.1e7 },
-  { id: 'ancient', name: 'Ancient', icon: '🦴', ground: '#5e8f4a', ground2: '#6fa058', wall: '#7d7466', accent: '#ff9f2e', mult: 1.7e8 },
-  { id: 'hell', name: 'Hell', icon: '😈', ground: '#b8423c', ground2: '#cf5148', wall: '#4a1414', accent: '#ff7a1f', mult: 2.6e9 },
-  { id: 'angelic', name: 'Angelic', icon: '👼', ground: '#ffffff', ground2: '#eef6ff', wall: '#bfe4ff', accent: '#ffe680', mult: 3.8e10 },
+  { id: 'coral', name: 'Coral', icon: '🐚', ground: '#f3dca0', ground2: '#ffe9b8', wall: '#36b6d8', accent: '#ff7fb3', mult: 4 },
+  { id: 'snow', name: 'Snow', icon: '⛄', ground: '#eef6ff', ground2: '#ffffff', wall: '#9fd2ff', accent: '#bfe8ff', mult: 16 },
+  { id: 'desert', name: 'Desert', icon: '🌵', ground: '#f2c76b', ground2: '#ffd889', wall: '#d98a3d', accent: '#5fbf3a', mult: 64 },
+  { id: 'crystal', name: 'Crystal', icon: '💎', ground: '#9aa3b8', ground2: '#b4bccc', wall: '#7a5cc9', accent: '#c48bff', mult: 256 },
+  { id: 'jungle', name: 'Jungle', icon: '🌴', ground: '#2f9e3e', ground2: '#3fb850', wall: '#3c7a2a', accent: '#ffd23a', mult: 1024 },
+  { id: 'golden', name: 'Golden', icon: '👑', ground: '#ffe9a6', ground2: '#fff4cf', wall: '#f2b630', accent: '#fff07a', mult: 4096 },
+  { id: 'ancient', name: 'Ancient', icon: '🦴', ground: '#5e8f4a', ground2: '#6fa058', wall: '#7d7466', accent: '#ff9f2e', mult: 16384 },
+  { id: 'hell', name: 'Hell', icon: '😈', ground: '#b8423c', ground2: '#cf5148', wall: '#4a1414', accent: '#ff7a1f', mult: 65536 },
+  { id: 'angelic', name: 'Angelic', icon: '👼', ground: '#ffffff', ground2: '#eef6ff', wall: '#bfe4ff', accent: '#ffe680', mult: 262144 },
 ]
 // Zone index for a distance (m) from the harpoon, and the distance where zone i starts.
 export const zoneStart = (i) => (i <= 0 ? 0 : LANE.firstZone + (i - 1) * LANE.zoneLength)
@@ -87,7 +94,9 @@ export const SPAWN_FACING = Math.PI // yaw the character faces (PI = north, PI/2
 // Only one base for now. Positions in metres; yaw = where a prop's front faces.
 const QUARTER = Math.PI / 2
 export const BASE = {
-  pen: { x: 0, z: -4, half: 11, gate: { x: 0, half: 2.4 }, fenceHeight: 1.6 }, // gate on the north side
+  // gate on the north side. The Expand Pen upgrade (UPGRADES.pen) moves the south fence
+  // `grow` m further south per level (penSouth); the big animals (dinosaurs...) need the room.
+  pen: { x: 0, z: -4, half: 11, gate: { x: 0, half: 2.4 }, fenceHeight: 1.6, grow: 5 },
   pad: { x: 10.5, z: -25, w: 10, d: 12, h: 0.3 }, // manual machine pad (grey platform)
   autoPad: { x: -10.5, z: -25, w: 10, d: 12, h: 0.3 },
   machine: { x: 13, z: -25, yaw: -QUARTER }, // main bait tank, front facing the aisle (west)
@@ -121,6 +130,9 @@ export const BASE = {
   // the yaw the player trains facing (PI/2 = east, toward the aisle).
   gym: { x: -21, z: -26.2, r: 2.5, facing: QUARTER, pad: { x: -21, z: -20.4, r: 1.35 } },
 }
+// The pen's south fence (z) at an Expand Pen level; the spawn stays PEN_SPAWN_GAP m south of it.
+export const penSouth = (level = 0) => BASE.pen.z + BASE.pen.half + BASE.pen.grow * level
+export const PEN_SPAWN_GAP = 8
 
 // Offline earnings: animals keep earning at `rate` of their normal income while you are
 // away (from `minSeconds`, up to `maxHours`); the cash waits in a pile at the base.
@@ -156,7 +168,7 @@ export const PLAYER_DIMS = { radius: 0.75, height: 1.8 } // capsule the characte
 
 // --- Look ------------------------------------------------------------------
 export const RENDER = { exposure: 1.0 }
-export const FOG = { near: 140, far: 520 }
+export const FOG = { near: 110, far: 380 } // view distance: Lane zones past LANE.viewDistance are culled inside the fog
 // The two lighting moods lighting.js blends between (key N toggles).
 export const TIME_OF_DAY = {
   transition: 2.5, // s to blend day <-> night
@@ -370,11 +382,26 @@ export const SAVE = { key: 'bait-an-animal.save.v1', every: 4 } // localStorage 
 export const SERVER_URL = import.meta.env.VITE_SERVER_URL || ''
 // saveEvery: s between server saves while playing (also on tab hide / close). retry: first
 // reconnect delay, doubling up to retryMax.
-export const NET = { saveEvery: 10, retry: 3, retryMax: 60 }
+// Boxity leaderboards (bloxity.js declares them so the trophy button shows; the game server reports
+// the scores from the saves it accepted: backend src/leaderboards.ts, same ids). The first
+// declaration creates a board; later changes are made in the Boxity dashboard, not here.
+export const LEADERBOARDS = [
+  { id: 'earned', label: 'Money Earned', order: 'desc', mode: 'sum', format: 'compact', reset: 'weekly' },
+  { id: 'catches', label: 'Animals Caught', order: 'desc', mode: 'sum', format: 'number', reset: 'weekly' },
+  { id: 'strength', label: 'Strength', order: 'desc', mode: 'best', format: 'compact', reset: 'none' },
+  { id: 'index', label: 'Pet Index', order: 'desc', mode: 'best', format: 'number', reset: 'none' },
+]
+// Rewarded ad (HUD "Watch ad" button, only while Boxity can serve one): 2x Cash for `minutes`.
+// The server checks the ad's token before it is granted (backend WorldRoom adReward).
+export const AD_REWARD = { placement: 'cash-boost', potion: 'cash', minutes: 10 }
+
+// moveEvery / baseEvery: s between presence updates (character / base display, net.js).
+export const NET = { saveEvery: 10, retry: 3, retryMax: 60, moveEvery: 0.1, baseEvery: 0.25 }
 export const START_MONEY = 0
 
 // Bait: the machine grows one bait kind at a time; every kind has `levelsPerKind`
 // levels, then the next kind starts. Overall level index p = kind * levelsPerKind + (lv - 1).
+// The last kind's last level (Rainbow Slug Lv 5, p = maxLevel) is the top: the machine stops there.
 export const BAITS = {
   levelsPerKind: 5,
   kinds: [
@@ -387,12 +414,13 @@ export const BAITS = {
     { id: 'slug', name: 'Rainbow Slug', color: '#ff5fd2', accent: '#7ff6ff' },
   ],
   xpBase: 40, // XP for Worm Lv 1 -> Lv 2
-  xpGrowth: 1.3, // each level needs this much more
+  xpGrowth: 1.5, // each level needs this much more
   carryMax: 6, // baits the player can hold at once
   regrow: 3.2, // s for a new bait to grow after one is claimed
   sellBase: 12, // $ for a Worm Lv 1 at the sell stall; x sellGrowth per level
-  sellGrowth: 1.42,
+  sellGrowth: 1.35,
 }
+BAITS.maxLevel = BAITS.kinds.length * BAITS.levelsPerKind - 1
 
 // Pumping the machine (the big red button) and its upgrades.
 export const MACHINE = {
@@ -404,11 +432,12 @@ export const MACHINE = {
 }
 
 // Rarities: weight at bait power 0, `k` = how fast the weight grows with bait power
-// (weight * e^(k * p)); luck multiplies every rarity above Common.
+// (weight * e^(k * p)); luck multiplies every rarity above Common. floor: the share of the
+// catches a tier keeps however good the bait and luck get (so every animal stays findable).
 export const RARITIES = [
-  { id: 'common', name: 'Common', color: '#d7dde6', dark: '#59626f', tile: ['#c7cdd6', '#7c848f'], weight: 62, k: -0.03, base: 6 },
-  { id: 'uncommon', name: 'Uncommon', color: '#62e34a', dark: '#1f7a18', tile: ['#7ef06a', '#2fae3a'], weight: 28, k: 0.06, base: 20 },
-  { id: 'rare', name: 'Rare', color: '#3eb0ff', dark: '#0b4f9a', tile: ['#3f8dff', '#1546c9'], weight: 8, k: 0.12, base: 70 },
+  { id: 'common', name: 'Common', color: '#d7dde6', dark: '#59626f', tile: ['#c7cdd6', '#7c848f'], weight: 62, k: -0.03, base: 6, floor: 0.06 },
+  { id: 'uncommon', name: 'Uncommon', color: '#62e34a', dark: '#1f7a18', tile: ['#7ef06a', '#2fae3a'], weight: 28, k: 0.06, base: 20, floor: 0.04 },
+  { id: 'rare', name: 'Rare', color: '#3eb0ff', dark: '#0b4f9a', tile: ['#3f8dff', '#1546c9'], weight: 8, k: 0.12, base: 70, floor: 0.03 },
   { id: 'epic', name: 'Epic', color: '#e46bff', dark: '#5a1a9e', tile: ['#f47dff', '#a52ad8'], weight: 1.6, k: 0.17, base: 220 },
   { id: 'legendary', name: 'Legendary', color: '#ffbf24', dark: '#8a5300', tile: ['#ffe14a', '#ff9f1a'], weight: 0.35, k: 0.21, base: 800 },
   { id: 'mythic', name: 'Mythic', color: '#ff4f5b', dark: '#8f0b1d', tile: ['#ff5a5a', '#c91f2a'], weight: 0.05, k: 0.25, base: 3200 },
@@ -418,7 +447,7 @@ export const RARITIES = [
 
 // The animals, by zone. base: the voxel model in animals.js; look: recolour + extras on it.
 // income = rarity base * f * zone mult ($ per second in the pen).
-// look: { tint: [hex, k], gold, glow: hex (emissive accents), scale, extras: [horn, horns, halo,
+// look: { tint: [hex, k], gold, glow: hex (emissive accents), extras: [horn, horns, halo,
 //   wings, batwings, flames, crystals, hump, sail, plates, spikes, crown, stripes, mane, longnose, fin] }
 const A = (id, name, zone, rarity, base, f = 1, look = {}) => ({ id, name, zone, rarity, base, f, look })
 const ROSTER = [
@@ -435,21 +464,21 @@ const ROSTER = [
   A('puffer', 'Pufferfish', 'coral', 'rare', 'fish', 0.9, { tint: ['#ffd23a', 0.6], extras: ['spikes'] }),
   A('jelly', 'Jellyfish', 'coral', 'rare', 'jelly', 1.2, { glow: '#ff8fe0' }),
   A('swordfish', 'Swordfish', 'coral', 'epic', 'fish', 1, { tint: ['#7f9cff', 0.5], extras: ['longnose', 'fin'] }),
-  A('shark', 'Shark', 'coral', 'legendary', 'fish', 1, { tint: ['#8a96a8', 0.65], scale: 1.5, extras: ['fin'] }),
+  A('shark', 'Shark', 'coral', 'legendary', 'fish', 1, { tint: ['#8a96a8', 0.65], extras: ['fin'] }),
   A('hare', 'Snow Hare', 'snow', 'common', 'bunny', 1, { tint: ['#e8f4ff', 0.6] }),
   A('penguin', 'Penguin', 'snow', 'uncommon', 'penguin'),
   A('fox', 'Arctic Fox', 'snow', 'rare', 'fox', 0.9, { tint: ['#f4fbff', 0.8] }),
-  A('wolf', 'Snow Wolf', 'snow', 'rare', 'cat', 1.2, { tint: ['#c8d6e8', 0.7], scale: 1.2, extras: ['mane'] }),
+  A('wolf', 'Snow Wolf', 'snow', 'rare', 'cat', 1.2, { tint: ['#c8d6e8', 0.7], extras: ['mane'] }),
   A('bear', 'Polar Bear', 'snow', 'epic', 'bear', 1, { tint: ['#f6f9ff', 0.85] }),
-  A('orca', 'Orca', 'snow', 'epic', 'fish', 1.3, { tint: ['#1d2230', 0.8], scale: 1.4, extras: ['fin'] }),
+  A('orca', 'Orca', 'snow', 'epic', 'fish', 1.3, { tint: ['#1d2230', 0.8], extras: ['fin'] }),
   A('mammoth', 'Mammoth', 'snow', 'legendary', 'mammoth'),
   A('lizard', 'Desert Lizard', 'desert', 'uncommon', 'frog', 0.9, { tint: ['#7fc04a', 0.5], extras: ['spikes'] }),
   A('tortoise', 'Tortoise', 'desert', 'uncommon', 'turtle', 1.3, { tint: ['#c99a4a', 0.5] }),
   A('camel', 'Camel', 'desert', 'rare', 'horse', 0.9, { tint: ['#d9a55a', 0.7], extras: ['hump'] }),
-  A('ostrich', 'Ostrich', 'desert', 'rare', 'bird', 1.2, { tint: ['#3a2f2a', 0.6], scale: 1.5 }),
+  A('ostrich', 'Ostrich', 'desert', 'rare', 'bird', 1.2, { tint: ['#3a2f2a', 0.6] }),
   A('cobra', 'Cobra', 'desert', 'epic', 'snake', 0.9, { tint: ['#c9a23a', 0.5] }),
-  A('kangaroo', 'Kangaroo', 'desert', 'epic', 'bunny', 1.2, { tint: ['#c98048', 0.75], scale: 1.6 }),
-  A('scorpion', 'Scorpion King', 'desert', 'legendary', 'crab', 1, { tint: ['#2a2230', 0.7], scale: 1.4, extras: ['crown'] }),
+  A('kangaroo', 'Kangaroo', 'desert', 'epic', 'bunny', 1.2, { tint: ['#c98048', 0.75] }),
+  A('scorpion', 'Scorpion King', 'desert', 'legendary', 'crab', 1, { tint: ['#2a2230', 0.7], extras: ['crown'] }),
   A('mole', 'Crystal Mole', 'crystal', 'uncommon', 'pig', 1, { tint: ['#7a6a9a', 0.7], extras: ['crystals'] }),
   A('gemhound', 'Gem Hound', 'crystal', 'rare', 'cat', 1, { tint: ['#5f8dff', 0.6], extras: ['crystals'] }),
   A('cavebat', 'Crystal Bat', 'crystal', 'rare', 'bird', 1.2, { tint: ['#4a3a7a', 0.7], extras: ['batwings'] }),
@@ -461,49 +490,67 @@ const ROSTER = [
   A('gorilla', 'Gorilla', 'jungle', 'rare', 'ape', 1.2, { tint: ['#2a2a30', 0.6] }),
   A('elephant', 'Elephant', 'jungle', 'epic', 'mammoth', 0.9, { tint: ['#9aa0ab', 0.85] }),
   A('croc', 'Crocodile', 'jungle', 'epic', 'raptor', 1.2, { tint: ['#4a7a2a', 0.7], extras: ['plates'] }),
-  A('tiger', 'Tiger', 'jungle', 'legendary', 'cat', 1, { tint: ['#ff8a1f', 0.7], scale: 1.3, extras: ['stripes'] }),
-  A('kong', 'Jungle Kong', 'jungle', 'mythic', 'ape', 1, { tint: ['#7a2a1a', 0.6], scale: 1.8, extras: ['crown'] }),
+  A('tiger', 'Tiger', 'jungle', 'legendary', 'cat', 1, { tint: ['#ff8a1f', 0.7], extras: ['stripes'] }),
+  A('kong', 'Jungle Kong', 'jungle', 'mythic', 'ape', 1, { tint: ['#7a2a1a', 0.6], extras: ['crown'] }),
   A('goldchick', 'Gold Chick', 'golden', 'rare', 'chicken', 1, { gold: true }),
   A('goldbunny', 'Gold Bunny', 'golden', 'rare', 'bunny', 1.2, { gold: true }),
   A('goldpig', 'Gold Pig', 'golden', 'epic', 'pig', 1, { gold: true, extras: ['crown'] }),
-  A('goldeagle', 'Gold Eagle', 'golden', 'epic', 'bird', 1.2, { gold: true, scale: 1.2 }),
+  A('goldeagle', 'Gold Eagle', 'golden', 'epic', 'bird', 1.2, { gold: true }),
   A('goldowl', 'Gold Owl', 'golden', 'legendary', 'bird', 1, { gold: true, glow: '#fff1a0', extras: ['crown'] }),
   A('goldstallion', 'Gold Stallion', 'golden', 'mythic', 'horse', 1, { gold: true, glow: '#ffe680', extras: ['mane', 'horn'] }),
   A('raptor', 'Raptor', 'ancient', 'rare', 'raptor'),
-  A('ankylo', 'Ankylosaur', 'ancient', 'rare', 'turtle', 1.2, { tint: ['#7a8a4a', 0.6], scale: 1.4, extras: ['spikes'] }),
+  A('ankylo', 'Ankylosaur', 'ancient', 'rare', 'turtle', 1.2, { tint: ['#7a8a4a', 0.6], extras: ['spikes'] }),
   A('stego', 'Stegosaurus', 'ancient', 'epic', 'cow', 0.9, { tint: ['#6a9a5a', 0.8], extras: ['plates'] }),
-  A('ptero', 'Pterodactyl', 'ancient', 'epic', 'bird', 1.1, { tint: ['#b0684a', 0.7], scale: 1.4, extras: ['batwings', 'longnose'] }),
-  A('brachio', 'Brachiosaurus', 'ancient', 'epic', 'longneck', 1.3, { tint: ['#5a9a6a', 0.85], scale: 1.4 }),
-  A('trex', 'T-Rex', 'ancient', 'legendary', 'raptor', 1, { tint: ['#5a6a3a', 0.6], scale: 1.8 }),
-  A('spino', 'Spinosaurus', 'ancient', 'mythic', 'raptor', 1, { tint: ['#3a5a7a', 0.6], scale: 1.9, extras: ['sail'] }),
-  A('skyrex', 'Sky Rex', 'ancient', 'celestial', 'raptor', 1, { tint: ['#9fe9ff', 0.7], scale: 1.9, glow: '#bff4ff', extras: ['wings', 'halo'] }),
+  A('ptero', 'Pterodactyl', 'ancient', 'epic', 'bird', 1.1, { tint: ['#b0684a', 0.7], extras: ['batwings', 'longnose'] }),
+  A('brachio', 'Brachiosaurus', 'ancient', 'epic', 'longneck', 1.3, { tint: ['#5a9a6a', 0.85] }),
+  A('trex', 'T-Rex', 'ancient', 'legendary', 'raptor', 1, { tint: ['#5a6a3a', 0.6] }),
+  A('spino', 'Spinosaurus', 'ancient', 'mythic', 'raptor', 1, { tint: ['#3a5a7a', 0.6], extras: ['sail'] }),
+  A('skyrex', 'Sky Rex', 'ancient', 'celestial', 'raptor', 1, { tint: ['#9fe9ff', 0.7], glow: '#bff4ff', extras: ['wings', 'halo'] }),
   A('embercrow', 'Ember Crow', 'hell', 'rare', 'bird', 1, { tint: ['#1a1418', 0.8], glow: '#ff6a1f', extras: ['flames'] }),
   A('hellbat', 'Hell Bat', 'hell', 'epic', 'bird', 1, { tint: ['#5a0f1a', 0.8], extras: ['batwings', 'horns'] }),
-  A('hellhound', 'Hellhound', 'hell', 'mythic', 'cat', 1, { tint: ['#1a1014', 0.85], scale: 1.4, glow: '#ff5a1f', extras: ['flames', 'horns'] }),
+  A('hellhound', 'Hellhound', 'hell', 'mythic', 'cat', 1, { tint: ['#1a1014', 0.85], glow: '#ff5a1f', extras: ['flames', 'horns'] }),
   A('dragon', 'Inferno Dragon', 'hell', 'celestial', 'dragon', 1, { glow: '#ff7a1f', extras: ['flames'] }),
   A('pegasus', 'Pegasus', 'angelic', 'epic', 'horse', 1, { tint: ['#ffffff', 0.85], extras: ['wings', 'mane'] }),
-  A('seraph', 'Seraph Eagle', 'angelic', 'epic', 'bird', 1.3, { tint: ['#fffaf0', 0.85], scale: 1.4, extras: ['halo'] }),
+  A('seraph', 'Seraph Eagle', 'angelic', 'epic', 'bird', 1.3, { tint: ['#fffaf0', 0.85], extras: ['halo'] }),
   A('holydragon', 'Holy Dragon', 'angelic', 'celestial', 'dragon', 1, { tint: ['#fff8e0', 0.85], glow: '#ffe680', extras: ['halo'] }),
-  A('griffin', 'Griffin', 'angelic', 'secret', 'cat', 1, { tint: ['#fff4d0', 0.7], scale: 1.5, glow: '#ffffff', extras: ['wings', 'halo', 'crown'] }),
+  A('griffin', 'Griffin', 'angelic', 'secret', 'cat', 1, { tint: ['#fff4d0', 0.7], glow: '#ffffff', extras: ['wings', 'halo', 'crown'] }),
 ]
+// Calibrated sizes: each species' standing height in metres (the player is 1.8 m). Small
+// critters stay readable (~1-1.5 m); real-world size order is kept, compressed: big mammals
+// 3-5 m, the giants (Kong, dinosaurs, dragons) 6-9.5 m. buildAnimal scales its base model to it.
+const SIZE = {
+  bunny: 1.2, duck: 1.2, chicken: 1.4, pig: 1.5, sheep: 1.7, cow: 2.2, pony: 2.4,
+  crab: 0.9, turtle: 1.3, axolotl: 1.1, puffer: 1.3, jelly: 1.9, swordfish: 1.9, shark: 2.8,
+  hare: 1.25, penguin: 1.6, fox: 1.5, wolf: 2.2, bear: 3.0, orca: 3.2, mammoth: 4.6,
+  lizard: 1.0, tortoise: 1.6, camel: 3.2, ostrich: 2.9, cobra: 1.7, kangaroo: 2.5, scorpion: 1.8,
+  mole: 1.3, gemhound: 2.0, cavebat: 1.5, prismcat: 2.0, geodrake: 3.4, crystalcorn: 3.0,
+  toucan: 1.5, giraffe: 5.8, gorilla: 2.8, elephant: 4.4, croc: 2.0, tiger: 2.4, kong: 6.2,
+  goldchick: 1.4, goldbunny: 1.3, goldpig: 1.6, goldeagle: 2.2, goldowl: 2.0, goldstallion: 3.2,
+  raptor: 2.4, ankylo: 2.8, stego: 4.0, ptero: 3.2, brachio: 9.5, trex: 7.2, spino: 8.0, skyrex: 8.6,
+  embercrow: 1.7, hellbat: 2.2, hellhound: 3.2, dragon: 7.0,
+  pegasus: 3.0, seraph: 2.8, holydragon: 7.4, griffin: 3.8,
+}
 export const ANIMALS = ROSTER.map((a, i) => {
   const z = ZONES.find((x) => x.id === a.zone)
   const r = RARITIES.find((x) => x.id === a.rarity)
-  return { ...a, income: Math.round(r.base * a.f * z.mult), speed: 1.4 + ((i * 37) % 9) / 10, scale: a.look.scale ?? 1 }
+  return { ...a, income: Math.round(r.base * a.f * z.mult), speed: 1.4 + ((i * 37) % 9) / 10, size: SIZE[a.id] }
 })
 // Index rewards: discovering an animal lets you claim income * claimSeconds once; a zone
 // with every animal discovered adds zoneBonus to the cash multiplier.
 export const INDEX = { claimSeconds: 10, zoneBonus: 0.2 }
-export const SHINY = { chance: 0.03, mult: 3 } // golden variant: x3 income
+export const SHINY = { chance: 0.03, mult: 3, cap: 0.15 } // golden variant: x3 income; luck raises the chance up to cap
 export const ANIMAL_SELL_MULT = 25 // an animal sells for income * this
 
-// Upgrades bought at the base signs. cost = base * growth^level.
+// Upgrades bought at the base signs. cost = base * growth^level. Paced (see the economy notes
+// in CLAUDE.md) so a typical player reaches Angelic in ~5 h and maxes everything in ~10 h.
 export const UPGRADES = {
-  mult: { name: 'Cash Multiplier', base: 16, growth: 2.05, step: 0.5, max: 40 }, // x(1 + step * level)
-  xp: { name: 'Bait XP', base: 9, growth: 1.55, ratio: 1.25, max: 60 }, // xp per pump * ratio^level
-  slot: { name: 'Pen Slot', base: 1000, growth: 2.2, start: 4, max: 12 },
+  mult: { name: 'Cash Multiplier', base: 16, growth: 2.7, step: 0.5, max: 40 }, // x(1 + step * level)
+  xp: { name: 'Bait XP', base: 9, growth: 2.2, ratio: 1.2, max: 40 }, // xp per pump * ratio^level
+  slot: { name: 'Pen Slot', base: 1000, growth: 2.8, start: 4, max: 12 },
+  // Expand Pen: the south fence moves BASE.pen.grow m south per level (sign on that fence).
+  pen: { name: 'Expand Pen', base: 50000, growth: 40, max: 5 },
   auto: { name: 'Auto Machine', price: 9600 }, // the second machine: three tanks that grow bait by themselves
-  autoSpeed: { name: 'Auto Speed', base: 15000, growth: 1.85, ratio: 1.3, max: 40 }, // Auto Machine XP/s * ratio^level
+  autoSpeed: { name: 'Auto Speed', base: 15000, growth: 2.7, ratio: 1.22, max: 25 }, // Auto Machine XP/s * ratio^level
 }
 
 // The training ring (Strength). Bought once, cheap, after the first animal is in the pen.
@@ -518,7 +565,7 @@ export const GYM = {
   perRepGrowth: 1.2,
   lvBonus: 0.05,
   xpBase: 4,
-  upgrade: { base: 1200, growth: 1.65, max: 30 }, // $ for level L -> L + 1 = base * growth^(L - 1)
+  upgrade: { base: 1500, growth: 2.6, max: 30 }, // $ for level L -> L + 1 = base * growth^(L - 1)
   moves: [
     { from: 1, move: 'curl', name: 'Dumbbells' },
     { from: 5, move: 'press', name: 'Barbell' },
@@ -556,19 +603,20 @@ export const PETS = {
 // The OP offer (top right): a limited-time pet deal that runs on a repeating timer.
 export const OFFER = { pet: 'mammoth', minutes: 20 }
 
-// Store (left HUD button). Potions last `minutes`; the bundle is the -50% deal.
+// Store (left HUD button). Potions last `minutes`; price = max(price, the pen's income per
+// second * incomeSeconds), so they stay a choice late in the game. The bundle is the -50% deal.
 export const STORE = {
   sale: 0.5, // shown as the -50% badge
   potions: {
-    luck: { name: 'Luck Potion', price: 900, minutes: 10, desc: 'x2 luck for rarer catches.' },
-    cash: { name: 'Cash Potion', price: 1200, minutes: 10, desc: 'x2 cash from every animal.' },
-    xp: { name: 'XP Potion', price: 600, minutes: 10, desc: 'x2 bait XP per pump.' },
+    luck: { name: 'Luck Potion', price: 900, incomeSeconds: 90, minutes: 10, desc: 'x2 luck for rarer catches.' },
+    cash: { name: 'Cash Potion', price: 1200, incomeSeconds: 150, minutes: 10, desc: 'x2 cash from every animal.' },
+    xp: { name: 'XP Potion', price: 600, incomeSeconds: 60, minutes: 10, desc: 'x2 bait XP per pump.' },
   },
   bundle: { name: 'Starter Bundle', potions: ['luck', 'cash', 'xp'], price: 1350, was: 2700 },
   // The Shop's limited Starter Pack (-50%): these animals jump into the pen, plus every potion
   // for potionMinutes. Bought once; the offer runs on a repeating `minutes` timer.
   // price = the animals' sell value * valueMult, rounded (shown next to twice that, struck out).
-  pack: { name: 'Starter Pack', animals: ['jelly', 'mammoth'], potionMinutes: 30, valueMult: 1.2, minutes: 15 },
+  pack: { name: 'Starter Pack', animals: ['jelly', 'pony'], potionMinutes: 30, valueMult: 1.2, minutes: 15 },
   // The Shop's "Upgrade Bait!" banner: jumps the bait machine to the next bait kind (Lv 1).
   // price = base * growth^(current kind).
   baitSkip: { base: 3000, growth: 3.6 },
@@ -585,7 +633,9 @@ export const HARPOON = {
   meter: { speed: 0.8, luck: [1, 2], perfect: 0.86, great: 0.62, good: 0.38 },
   aim: 0.45, // s the turret takes to swing and raise the barrel before it fires
   // Longest shot at full power (m) = base + k * log2(1 + Strength / s0); empty power lands at minPower of it.
-  reach: { base: 55, k: 95, s0: 25, minPower: 0.35 },
+  // Not capped by the Lane: every zone below the one the longest shot reaches can be aimed at
+  // directly (the Target picker), so a reach past the Lane's end makes Angelic a sure landing.
+  reach: { base: 55, k: 42, s0: 25, minPower: 0.35 },
   jitter: 4, // +- m of random distance
   spread: { canyon: 4, wild: 10 }, // max sideways offset of the landing spot (in the canyon / the wild area)
   flight: [1.5, 2.6], // s in the air at the shortest .. longest shot
@@ -597,6 +647,9 @@ export const HARPOON = {
   charge: { base: 1.5, perDouble: 0.45, max: 4.5 }, // s the count-up lasts: base + perDouble * log2(bush mult)
   luckPower: 0.5, // the roll uses (shot luck)^luckPower on top of potions/pets (the shown number is the hype)
   hook: 1.5, // s of "HOOKED!" before the reel starts
+  // The bait lands `gap` m from a hiding spot; the catch jumps out, runs to it at `run` m/s,
+  // sniffs for `sniff` s and bites.
+  approach: { gap: 5.5, run: 6, sniff: 0.6 },
   // Reeling in: it reels by itself in `seconds` (+ perRarity per tier), each click adds `click`
   // (less for rarer catches), and every tug (random gap) the animal pulls back for tugTime s.
   reel: { seconds: 8, perRarity: 1.4, click: 0.05, clickRarity: 0.005, minClick: 0.022, tug: [1.6, 3.4], tugTime: 0.75, tugPull: 0.09 },

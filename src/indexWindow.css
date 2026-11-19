@@ -1,0 +1,323 @@
+/* Pet Index window (windows.js) on the panel skin (uiPanel.css): blue header with the
+   completion on the right; body = zone sections (picture + tiles + collect-all bar) on the
+   left with CLAIM ALL under them, the selected animal + its reward on the right.
+   Lengths are design px times --uiw-u (1913x990 reference), like the other panel windows. */
+.win-index2 {
+  --uiw-w: 1270;
+  --uiw-h: 770;
+  --ph: 130;
+  --bw: 1240;
+  --bh: 625;
+  --head: linear-gradient(#5ff6ff, #18c8ff 45%, #0a8cf0);
+  --body: rgba(46, 40, 8, 0.5);
+}
+.win-index2 .uiw-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) calc(360 * var(--uiw-u));
+  gap: calc(10 * var(--uiw-u));
+  padding: calc(10 * var(--uiw-u));
+}
+.pi-complete {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1;
+  white-space: nowrap;
+}
+.pi-complete b {
+  font-size: max(15px, calc(46 * var(--uiw-u)));
+  color: #c6ff3a;
+}
+.pi-complete small {
+  font-size: max(12px, calc(32 * var(--uiw-u)));
+  color: #fff;
+}
+
+/* --- Left: zone sections ------------------------------------------------------------------ */
+.pi-left {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  gap: calc(8 * var(--uiw-u));
+}
+.pi-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+  border: max(2px, calc(5 * var(--uiw-u))) solid rgba(0, 0, 0, 0.45);
+  scrollbar-width: thin;
+}
+.pi-zone {
+  display: flex;
+  gap: calc(12 * var(--uiw-u));
+  padding: calc(10 * var(--uiw-u));
+  border-bottom: max(2px, calc(5 * var(--uiw-u))) solid rgba(0, 0, 0, 0.45);
+}
+.pi-pic {
+  position: relative;
+  flex: none;
+  width: calc(170 * var(--uiw-u));
+  min-height: calc(330 * var(--uiw-u));
+  background: var(--zc);
+  overflow: hidden;
+}
+.pi-pic img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.pi-pic b {
+  position: absolute;
+  left: 50%;
+  top: calc(30 * var(--uiw-u));
+  transform: translateX(-50%);
+  font-size: max(13px, calc(38 * var(--uiw-u)));
+  white-space: nowrap;
+}
+.pi-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: calc(10 * var(--uiw-u));
+}
+.pi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: calc(14 * var(--uiw-u));
+}
+.pi-tile {
+  position: relative;
+  aspect-ratio: 1;
+  min-height: 44px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--tile);
+  border: max(2px, calc(5 * var(--uiw-u))) solid #1d1a22;
+  box-shadow: inset 0 calc(-8 * var(--uiw-u)) 0 rgba(0, 0, 0, 0.15);
+  font: inherit;
+  color: #fff;
+  cursor: pointer;
+  overflow: hidden;
+}
+.pi-tile.sel {
+  border-color: #fff;
+  box-shadow: 0 0 0 max(1px, calc(3 * var(--uiw-u))) #1d1a22, 0 0 calc(18 * var(--uiw-u)) rgba(255, 255, 255, 0.7);
+}
+.pi-tile:active {
+  transform: scale(0.96);
+}
+.pi-tile img {
+  flex: 1;
+  min-height: 0;
+  width: 80%;
+  object-fit: contain;
+}
+.pi-tile:not(.known) img {
+  opacity: 0.9;
+}
+.pi-name,
+.pi-foot {
+  font-size: max(11px, calc(30 * var(--uiw-u)));
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.1;
+  --ow: 4;
+}
+.pi-foot {
+  color: #fff;
+}
+.pi-tile.known .pi-foot {
+  color: #c6ff3a;
+}
+.pi-dot {
+  position: absolute;
+  right: calc(6 * var(--uiw-u));
+  top: calc(6 * var(--uiw-u));
+  width: max(8px, calc(20 * var(--uiw-u)));
+  height: max(8px, calc(20 * var(--uiw-u)));
+  border-radius: 50%;
+  background: #ff3a3a;
+  border: max(1px, calc(3 * var(--uiw-u))) solid #fff;
+}
+.pi-goal {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(8 * var(--uiw-u));
+}
+.pi-goal > span {
+  font-size: max(13px, calc(42 * var(--uiw-u)));
+  text-align: center;
+}
+.pi-bar {
+  position: relative;
+  width: 100%;
+  height: max(26px, calc(62 * var(--uiw-u)));
+  background: rgba(40, 34, 8, 0.75);
+  border: max(2px, calc(5 * var(--uiw-u))) solid rgba(0, 0, 0, 0.55);
+  display: grid;
+  place-items: center;
+}
+.pi-bar i {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  background: linear-gradient(#a6ff3a, #5fe014);
+}
+.pi-bar.full i {
+  background: linear-gradient(#fff36a, #ffc61a);
+}
+.pi-bar b {
+  position: relative;
+  font-size: max(15px, calc(48 * var(--uiw-u)));
+}
+.pi-bar-ico {
+  position: absolute;
+  right: calc(-14 * var(--uiw-u));
+  top: 50%;
+  width: calc(84 * var(--uiw-u));
+  height: calc(84 * var(--uiw-u));
+  min-width: 28px;
+  min-height: 28px;
+  transform: translateY(-50%) rotate(-12deg);
+}
+.pi-bar-ico svg,
+.pi-cash svg,
+.pi-book svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.pw-btn.pi-all {
+  width: 100%;
+  font-size: max(15px, calc(44 * var(--uiw-u)));
+  position: relative;
+}
+.pw-btn.blue {
+  background: linear-gradient(#5ff6ff, #18b8ff 50%, #0a84e8);
+}
+.pi-book {
+  position: absolute;
+  left: calc(-18 * var(--uiw-u));
+  top: 50%;
+  width: calc(96 * var(--uiw-u));
+  height: calc(96 * var(--uiw-u));
+  min-width: 32px;
+  min-height: 32px;
+  transform: translateY(-50%) rotate(-14deg);
+}
+
+/* --- Right: the selected animal + reward ------------------------------------------------------- */
+.pi-right {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(10 * var(--uiw-u));
+  padding: calc(10 * var(--uiw-u)) 0;
+  border-left: max(2px, calc(5 * var(--uiw-u))) solid rgba(0, 0, 0, 0.45);
+  min-height: 0;
+}
+.pi-big {
+  width: 92%;
+  aspect-ratio: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  padding-bottom: calc(10 * var(--uiw-u));
+  background: var(--tile);
+  border: max(2px, calc(6 * var(--uiw-u))) solid #1d1a22;
+  box-shadow: inset 0 0 0 max(1px, calc(3 * var(--uiw-u))) rgba(255, 255, 255, 0.4);
+}
+.pi-big img {
+  flex: 1;
+  min-height: 0;
+  width: 70%;
+  object-fit: contain;
+}
+.pi-big b {
+  font-size: max(14px, calc(44 * var(--uiw-u)));
+}
+.pi-rar {
+  font-size: max(13px, calc(42 * var(--uiw-u)));
+}
+.pi-inc {
+  font-size: max(14px, calc(46 * var(--uiw-u)));
+  color: #c6ff3a;
+}
+.pi-reward {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(4 * var(--uiw-u));
+  font-size: max(13px, calc(34 * var(--uiw-u)));
+}
+.pi-cash {
+  position: relative;
+  width: calc(110 * var(--uiw-u));
+  height: calc(100 * var(--uiw-u));
+  min-width: 44px;
+  min-height: 40px;
+  padding: calc(6 * var(--uiw-u));
+  background: rgba(0, 0, 0, 0.35);
+  border: max(2px, calc(4 * var(--uiw-u))) solid #1d1a22;
+}
+.pi-cash b {
+  position: absolute;
+  left: 50%;
+  bottom: calc(-6 * var(--uiw-u));
+  transform: translateX(-50%);
+  font-size: max(11px, calc(26 * var(--uiw-u)));
+  white-space: nowrap;
+}
+.pw-btn.pi-claim {
+  width: 80%;
+  margin-top: calc(10 * var(--uiw-u));
+}
+
+/* Phones (portrait): the detail panel goes under the list as a row. */
+@media (max-aspect-ratio: 1/1) {
+  .win-index2 {
+    --uiw-h: 1500;
+    --bh: 1340;
+  }
+  .win-index2 .uiw-body {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 1fr) auto;
+  }
+  .pi-right {
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+    border-left: 0;
+    border-top: max(2px, calc(5 * var(--uiw-u))) solid rgba(0, 0, 0, 0.45);
+  }
+  .pi-big {
+    width: 34%;
+  }
+  .pi-reward {
+    margin-top: 0;
+  }
+  .pw-btn.pi-claim {
+    width: auto;
+    margin-top: 0;
+  }
+  .pi-pic {
+    width: calc(130 * var(--uiw-u));
+  }
+  .pi-pic b {
+    font-size: 9px;
+  }
+}

@@ -1,0 +1,412 @@
+/* Shop / Pets / Sell windows (windows.js) on the panel skin (uiPanel.css): sizes, header colours
+   and each window's own pieces. Lengths are design px times --uiw-u (1913x990 reference). */
+.win-sell2 {
+  --uiw-w: 903;
+  --uiw-h: 770;
+  --ph: 105;
+  --bw: 863;
+  --bh: 568;
+}
+.win-shop {
+  --uiw-w: 1082;
+  --uiw-h: 716;
+  --ph: 108;
+  --bw: 1062;
+  --bh: 608;
+  --head: linear-gradient(#ffe42a, #ffc61a 50%, #ffa00a);
+  --body: rgba(14, 44, 96, 0.42);
+}
+.win-pets2 {
+  --uiw-w: 1053;
+  --uiw-h: 750;
+  --ph: 130;
+  --bw: 1002;
+  --bh: 620;
+  --head: linear-gradient(#c94dff, #a51aff 50%, #8410e0);
+  --body: rgba(26, 18, 34, 0.45);
+}
+
+/* Sell: the footer strip sits under the body, a little narrower. */
+.sell-foot {
+  width: calc(820 * var(--uiw-u));
+  margin-top: calc(10 * var(--uiw-u));
+}
+.sell-row .pw-thumb {
+  transform: rotate(-12deg);
+}
+
+/* Shop header pill + sections. */
+.pw-sale {
+  padding: calc(6 * var(--uiw-u)) calc(22 * var(--uiw-u)) calc(9 * var(--uiw-u));
+  border: max(2px, calc(5 * var(--uiw-u))) solid var(--uiw-ink);
+  border-radius: 999px;
+  background: linear-gradient(#ff4a5e, #e8183a);
+  font-size: max(13px, calc(38 * var(--uiw-u)));
+  white-space: nowrap;
+  color: #fff;
+  --ow: 4;
+}
+.shop-scroll {
+  gap: calc(24 * var(--uiw-u));
+  padding: calc(30 * var(--uiw-u)) calc(30 * var(--uiw-u)) calc(34 * var(--uiw-u));
+}
+.shop-h {
+  margin: calc(4 * var(--uiw-u)) 0 0;
+  font-size: max(16px, calc(48 * var(--uiw-u)));
+  color: #fff;
+  --ow: 5;
+}
+
+/* Starter Pack. */
+.shop-pack {
+  flex: none;
+  padding: calc(12 * var(--uiw-u)) calc(20 * var(--uiw-u)) calc(18 * var(--uiw-u));
+  background: linear-gradient(#2ad8ff, #0cb2ff 45%, #0a8cf2);
+  border: max(2px, calc(6 * var(--uiw-u))) solid var(--uiw-ink);
+}
+.pack-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.pack-title {
+  font-size: max(18px, calc(58 * var(--uiw-u)));
+  color: #fff;
+  --ow: 5.5;
+}
+.pack-limited {
+  font-size: max(15px, calc(48 * var(--uiw-u)));
+  color: #ff3048;
+  --oc: #fff;
+  --ow: 4;
+}
+.pack-row {
+  display: flex;
+  align-items: stretch;
+  gap: calc(12 * var(--uiw-u));
+  margin-top: calc(8 * var(--uiw-u));
+}
+.pack-tile {
+  flex: 0 0 calc(190 * var(--uiw-u));
+  min-width: 0;
+  height: calc(200 * var(--uiw-u));
+  min-height: 92px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: calc(4 * var(--uiw-u)) calc(4 * var(--uiw-u)) calc(8 * var(--uiw-u));
+  background: linear-gradient(#1f8cff, #0b54c8);
+  border: max(2px, calc(5 * var(--uiw-u))) solid var(--uiw-ink);
+  overflow: hidden;
+}
+.pack-tile b {
+  font-size: max(12px, calc(36 * var(--uiw-u)));
+  line-height: 1.05;
+  text-align: center;
+  color: #fff;
+  --ow: 4;
+}
+.pack-tile img {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  object-fit: contain;
+}
+.pack-tile span {
+  font-size: max(12px, calc(38 * var(--uiw-u)));
+  color: #fff;
+  --ow: 4;
+}
+.pack-flasks {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+}
+.pack-flasks svg {
+  width: calc(64 * var(--uiw-u));
+  height: calc(64 * var(--uiw-u));
+  min-width: 22px;
+  min-height: 22px;
+  margin: 0 calc(-8 * var(--uiw-u));
+}
+.pack-side {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: calc(8 * var(--uiw-u));
+}
+.pack-time {
+  font-size: max(14px, calc(42 * var(--uiw-u)));
+  color: #ffbe1a;
+  --ow: 4.5;
+  white-space: nowrap;
+}
+.pack-was {
+  font-size: max(12px, calc(30 * var(--uiw-u)));
+  color: #dfe9ff;
+  --ow: 3;
+}
+.pack-buy {
+  width: 100%;
+  height: calc(82 * var(--uiw-u));
+}
+
+/* Upgrade Bait banner. */
+.shop-upgrade {
+  flex: none;
+  padding: calc(14 * var(--uiw-u)) calc(20 * var(--uiw-u)) calc(20 * var(--uiw-u));
+  background: repeating-linear-gradient(115deg, rgba(255, 255, 255, 0.07) 0 calc(40 * var(--uiw-u)), transparent 0 calc(80 * var(--uiw-u))), linear-gradient(#3ab0ff, #1b7af0);
+  border: max(2px, calc(6 * var(--uiw-u))) solid var(--uiw-ink);
+  text-align: center;
+}
+.up-title {
+  font-size: max(22px, calc(76 * var(--uiw-u)));
+  line-height: 1.1;
+  color: #fff;
+  --ow: 6;
+}
+.up-title .uiw-text {
+  font-size: inherit;
+}
+.up-rainbow {
+  background: linear-gradient(90deg, #b13bff, #3b6bff, #1ad0ff, #3bff5a, #ffe61a, #ff9a1a, #ff3b5a);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(2px 0 0 #1d1a22) drop-shadow(-2px 0 0 #1d1a22) drop-shadow(0 2px 0 #1d1a22) drop-shadow(0 -2px 0 #1d1a22);
+}
+.up-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: calc(10 * var(--uiw-u)) calc(26 * var(--uiw-u));
+  margin-top: calc(6 * var(--uiw-u));
+}
+.up-row figure {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.up-row img {
+  width: calc(130 * var(--uiw-u));
+  height: calc(130 * var(--uiw-u));
+  min-width: 48px;
+  min-height: 48px;
+  object-fit: contain;
+}
+.up-row figcaption {
+  font-size: max(12px, calc(32 * var(--uiw-u)));
+  color: #fff;
+  --ow: 3.5;
+}
+.up-arrow svg {
+  width: calc(90 * var(--uiw-u));
+  height: calc(90 * var(--uiw-u));
+  min-width: 34px;
+  min-height: 34px;
+}
+.up-buy {
+  min-width: calc(290 * var(--uiw-u));
+  height: calc(78 * var(--uiw-u));
+}
+
+/* Pass / potion / pet cards. */
+.shop-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: calc(22 * var(--uiw-u));
+}
+.shop-grid.three {
+  grid-template-columns: repeat(3, 1fr);
+}
+.shop-card {
+  --c1: #c8ff3a;
+  --c2: #5ee014;
+  --c3: #2fbf0c;
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: 1fr auto;
+  gap: calc(8 * var(--uiw-u)) calc(10 * var(--uiw-u));
+  min-height: calc(270 * var(--uiw-u));
+  padding: calc(14 * var(--uiw-u)) calc(16 * var(--uiw-u)) calc(16 * var(--uiw-u));
+  background: radial-gradient(circle at 26% 38%, var(--c1), var(--c2) 55%, var(--c3));
+  border: max(2px, calc(6 * var(--uiw-u))) solid var(--uiw-ink);
+}
+.shop-card.yellow {
+  --c1: #fff36a;
+  --c2: #ffd21a;
+  --c3: #ffa80a;
+}
+.shop-card.purple {
+  --c1: #e28cff;
+  --c2: #b030ff;
+  --c3: #7a0fd0;
+}
+.shop-card.blue {
+  --c1: #7fdcff;
+  --c2: #2a9cff;
+  --c3: #0b5fd8;
+}
+.shop-card.orange {
+  --c1: #ffe08a;
+  --c2: #ffa62a;
+  --c3: #f0700c;
+}
+.shop-card.teal {
+  --c1: #8affe8;
+  --c2: #1ad0b0;
+  --c3: #0a9a88;
+}
+.card-art {
+  position: relative;
+  align-self: center;
+  width: calc(150 * var(--uiw-u));
+  height: calc(150 * var(--uiw-u));
+  min-width: 46px;
+  min-height: 46px;
+}
+.card-art svg,
+.card-art img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 calc(4 * var(--uiw-u)) 0 rgba(0, 0, 0, 0.25));
+}
+.card-badge {
+  position: absolute;
+  right: calc(-14 * var(--uiw-u));
+  bottom: calc(4 * var(--uiw-u));
+  font-size: max(16px, calc(58 * var(--uiw-u)));
+  color: #fff;
+  --ow: 5;
+}
+.card-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  text-align: right;
+  gap: calc(4 * var(--uiw-u));
+  min-width: 0;
+}
+.card-text b {
+  font-size: max(16px, calc(54 * var(--uiw-u)));
+  line-height: 1.05;
+  color: #fff;
+  --ow: 5;
+}
+.card-text span {
+  font-size: max(12px, calc(38 * var(--uiw-u)));
+  line-height: 1.1;
+  color: #fff;
+  --ow: 4;
+}
+.card-buy {
+  grid-column: 1 / -1;
+  height: calc(72 * var(--uiw-u));
+  font-size: max(15px, calc(44 * var(--uiw-u)));
+}
+.shop-grid.three .shop-card {
+  grid-template-columns: 1fr;
+  justify-items: center;
+}
+.shop-grid.three .card-text {
+  align-items: center;
+  text-align: center;
+}
+.shop-grid.three .card-art {
+  width: calc(110 * var(--uiw-u));
+  height: calc(110 * var(--uiw-u));
+}
+
+/* Pets. */
+.pets-total {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1;
+}
+.pets-total small {
+  font-size: max(11px, calc(28 * var(--uiw-u)));
+  color: #fff;
+  --ow: 3;
+}
+.pets-total b {
+  font-size: max(15px, calc(48 * var(--uiw-u)));
+  color: #8dff2a;
+  --ow: 4.5;
+  white-space: nowrap;
+}
+.win-pets2 .uiw-title h2 {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pet-row {
+  min-height: calc(160 * var(--uiw-u));
+  margin: 0 calc(8 * var(--uiw-u));
+  background: rgba(20, 16, 26, 0.4);
+}
+.pet-box {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: calc(165 * var(--uiw-u));
+  height: calc(135 * var(--uiw-u));
+  min-width: 52px;
+  min-height: 44px;
+  background: rgba(10, 8, 14, 0.45);
+  border: max(2px, calc(5 * var(--uiw-u))) solid var(--uiw-ink);
+}
+.pet-row .pw-thumb {
+  width: 92%;
+  height: 92%;
+  min-width: 0;
+  min-height: 0;
+}
+.pet-row.locked .pw-thumb {
+  filter: grayscale(0.75) brightness(0.8);
+}
+.pet-row .pw-btn {
+  width: calc(300 * var(--uiw-u));
+  min-width: 92px;
+  height: calc(76 * var(--uiw-u));
+  font-size: max(15px, calc(52 * var(--uiw-u)));
+}
+.pets-foot {
+  justify-content: center;
+  border-width: max(2px, calc(5 * var(--uiw-u))) 0 0;
+  background: rgba(20, 16, 26, 0.55);
+  padding: calc(14 * var(--uiw-u));
+}
+.pets-foot .pw-btn {
+  min-width: calc(345 * var(--uiw-u));
+  height: calc(86 * var(--uiw-u));
+  font-size: max(16px, calc(48 * var(--uiw-u)));
+}
+
+/* Narrow (phone portrait): one card per row. */
+@media (max-width: 560px) {
+  .shop-grid,
+  .shop-grid.three {
+    grid-template-columns: 1fr;
+  }
+  .pack-row {
+    flex-wrap: wrap;
+  }
+  .pack-tile {
+    flex: 1 1 28%;
+  }
+  .pack-side {
+    flex-basis: 100%;
+  }
+}

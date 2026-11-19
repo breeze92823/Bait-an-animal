@@ -6,12 +6,12 @@
 // own sounds) anywhere. Every button press gets its click here (one
 // capture-phase listener), so menus need no wiring of their own.
 import { AUDIO, BASE, PATH } from '../config.js'
-import { A, installAudio as installCore, isMuted, onStart, setDucked, setMuted, setVolume, toggleMuted } from './core.js'
+import { A, installAudio as installCore, isMuted, onStart, setAdMuted, setDucked, setMuted, setVolume, toggleMuted } from './core.js'
 import * as sfx from './sfx.js'
 import * as snd from './game.js'
 import * as ambience from './ambience.js'
 
-export { sfx, snd, setVolume, setMuted, isMuted, toggleMuted }
+export { sfx, snd, setVolume, setMuted, isMuted, toggleMuted, setAdMuted }
 export const audioCore = A // dev console: context state, voice count
 
 function onPress(e) {

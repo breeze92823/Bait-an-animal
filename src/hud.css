@@ -814,14 +814,28 @@
 .hud-cancel:active {
   transform: translateX(-50%) scale(0.95);
 }
-/* Portrait phones: the touch bait-bag slot is where the bar goes. */
+/* Portrait: the bar sits above the strength + money stack (bottom left), which on touch is
+   itself lifted above the joystick. */
 @media (orientation: portrait) {
+  .hud-train {
+    bottom: calc(var(--sb) + 150px);
+  }
   .touch-ui .hud-train {
-    bottom: calc(var(--sb) + clamp(222px, 52vmin, 270px));
+    bottom: calc(var(--sb) + clamp(280px, 62vmin, 330px));
+    left: auto;
+    right: calc(var(--sr) + 12px);
+    transform: none;
+    width: calc(100% - var(--sl) - var(--sr) - 96px);
+    min-width: 0;
   }
 }
-/* Short landscape: Cancel clears the Store/Pets/Index row beside the toolbar. */
+/* Short landscape: Cancel clears the Store/Pets/Index row beside the toolbar; the bar stays
+   between the joystick and the jump cluster. */
 @media (orientation: landscape) and (max-height: 500px) {
+  .hud-train {
+    width: min(calc(100% - 340px), 520px);
+    min-width: 0;
+  }
   .hud-cancel {
     top: calc(var(--st) + 74px);
     min-height: 44px;
@@ -842,4 +856,16 @@
   width: 1.05em;
   height: 1.05em;
   background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath d='M8 56 Q4 44 10 34 L18 16 Q21 9 28 10 L35 12 Q41 15 38 21 L33 25 Q29 28 28 33 L29 37 Q35 27 46 28 Q59 30 59 44 Q58 57 44 59 Q26 61 8 56 Z' fill='%23ffb12e' stroke='%231d1a22' stroke-width='4' stroke-linejoin='round'/%3E%3Cpath d='M37 38 Q45 34 51 40' stroke='%23c96a00' stroke-width='3.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+
+/* Rewarded ad card (Boxity only, hidden while no ad can be served): 2x Cash for a while. */
+.hud-pass.ad {
+  background: linear-gradient(#9dff7a, #3fd25a 55%, #1f9e3a);
+}
+.hud-pass.ad .pass-top {
+  color: #ffe14a;
+}
+.hud-pass.ad.busy {
+  opacity: 0.6;
+  pointer-events: none;
 }
